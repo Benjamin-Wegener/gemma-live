@@ -100,10 +100,13 @@ class LocalGemmaAssistant(private val context: Context) {
         const val LITERT_LM_VERSION = "0.17.1"
         /**
          * maxNumTokens in EngineConfig bestimmt den GPU-KV-Cache.
-         * 16384 Tokens für lange Multi-Turn-Dialoge. Achtung: 4x KV-Speicher
-         * gegenüber 4096 — bei OOM greift die Fallback-Kette (GPU -> CPU).
+         * 8192 Tokens begrenzen den GPU-KV-Cache zuverlässig. Vor dem Limit
+         * verdichtet Gemma den bisherigen Dialog selbst und startet mit dieser
+         * Zusammenfassung in ein frisches Context Window.
          */
-        const val MAX_NUM_TOKENS = 16384
+        const val MAX_NUM_TOKENS = 8192
+        /** Reserviert Platz für die Kompaktierungsfrage und die nächste Audioeingabe. */
+        private const val DIRECT_AUDIO_COMPACTION_THRESHOLD_TOKENS = 7168
         const val LLM_TEMPERATURE = 0.2
         const val LLM_TOP_K = 20
         const val LLM_TOP_P = 0.90
@@ -167,7 +170,7 @@ class LocalGemmaAssistant(private val context: Context) {
 
     /**
      * Gemma 4 E2B MTP GPU Direct Audio Processing (Conversation-API):
-     * Nativer Audio-Input über Content.AudioBytes + Content.Text.
+     * Nativer Audio-Input über Content.AudioFile + Content.Text.
      * Der E2B-Audio-Encoder wird über einen vollständigen 16-kHz WAV-Container gespeist.
      * Die Conversation-API dekodiert den Blob mit miniaudio; rohe PCM-Bytes sind kein
      * gültiger Eingabestream für diesen Decoder.
@@ -196,13 +199,11 @@ class LocalGemmaAssistant(private val context: Context) {
     }
 
     private var activeConversation: com.google.ai.edge.litertlm.Conversation? = null
-    private var activeConversationTurns: Int = 0
 
     /** Gibt Ressourcen frei (Engine + Session + Conversation). Idempotent. */
     fun release() {
         runCatching { activeConversation?.close() }
         activeConversation = null
-        activeConversationTurns = 0
         runCatching { session?.close() }
         session = null
         runCatching { engine?.close() }
@@ -212,12 +213,71 @@ class LocalGemmaAssistant(private val context: Context) {
         lastLoadInfo = null
     }
 
+    private fun createDirectAudioConversation(
+        e: Engine,
+        compactedContext: String = ""
+    ): com.google.ai.edge.litertlm.Conversation {
+        val instruction = if (compactedContext.isBlank()) {
+            SYSTEM_PROMPT
+        } else {
+            "$SYSTEM_PROMPT\n\nZusammenfassung des bisherigen Gesprächs " +
+                "(als Kontext fortführen):\n$compactedContext"
+        }
+        return e.createConversation(
+            ConversationConfig(
+                systemInstruction = Contents.of(Content.Text(instruction)),
+                samplerConfig = SamplerConfig(
+                    topK = LLM_TOP_K,
+                    topP = LLM_TOP_P,
+                    temperature = LLM_TEMPERATURE
+                )
+            )
+        )
+    }
+
+    /** Verdichtet den echten Conversation-KV-Kontext mit Gemma, bevor er voll läuft. */
+    private suspend fun compactDirectAudioConversation(
+        e: Engine,
+        conv: com.google.ai.edge.litertlm.Conversation,
+        tokensBeforeCompaction: Int
+    ): com.google.ai.edge.litertlm.Conversation {
+        val summary = StringBuilder()
+        val done = CompletableDeferred<Boolean>()
+        conv.sendMessageAsync(
+            Contents.of(Content.Text(
+                "Der Kontext wird gleich erneuert. Fasse den bisherigen Dialog für dich " +
+                    "selbst in höchstens 4 kurzen deutschen Sätzen zusammen: wichtige Fakten, " +
+                    "offene Fragen, Wünsche und Gesprächsfaden. Keine Einleitung."
+            )),
+            object : MessageCallback {
+                override fun onMessage(message: Message) {
+                    summary.append(message.toString())
+                }
+                override fun onDone() { done.complete(true) }
+                override fun onError(t: Throwable) {
+                    Log.w(TAG, "Direkte Kontext-Kompaktierung fehlgeschlagen", t)
+                    done.complete(false)
+                }
+            },
+            mapOf("clear_kv_cache_before_prefill" to false)
+        )
+        val compacted = if (done.await()) sanitizeLlmOutput(summary.toString()) else ""
+        runCatching { conv.close() }
+        val next = createDirectAudioConversation(e, compacted)
+        Log.i(
+            "BENCH",
+            "BENCH context_compacted previous=$tokensBeforeCompaction " +
+                "summary_chars=${compacted.length} max=$MAX_NUM_TOKENS"
+        )
+        return next
+    }
+
     /**
      * Gemma 4 E2B MTP GPU Direct Audio Processing (Conversation-API):
-     * Nativer Audio-Input über Content.AudioBytes + Content.Text (16-kHz WAV).
+     * Nativer Audio-Input über Content.AudioFile + Content.Text (16-kHz WAV).
      * Handhabt Aufnahmen >30s durch Stückelung in <=30s Abschnitte (480000 Samples).
-     * Hält dieselbe Conversation über bis zu 10 Runden (10 User-Audio-Eingaben) am Leben,
-     * damit Gemma den echten Kontext im KV-Cache behält.
+     * Hält dieselbe Conversation bis zur Token-Grenze am Leben und lässt Gemma
+     * den Kontext davor automatisch kompakt zusammenfassen.
      */
     suspend fun processAudioDirectly(
         floatSamples: FloatArray,
@@ -252,22 +312,13 @@ class LocalGemmaAssistant(private val context: Context) {
 
         mutex.withLock {
             try {
-                // Nach 10 Runden Conversation erneuern, um Context-Window/KV-Cache nicht zu überfüllen
-                if (activeConversation == null || activeConversationTurns >= 10) {
-                    runCatching { activeConversation?.close() }
-                    activeConversation = e.createConversation(
-                        ConversationConfig(
-                            systemInstruction = Contents.of(Content.Text(SYSTEM_PROMPT)),
-                            samplerConfig = SamplerConfig(
-                                topK = LLM_TOP_K,
-                                topP = LLM_TOP_P,
-                                temperature = LLM_TEMPERATURE
-                            )
-                        )
-                    )
-                    activeConversationTurns = 0
+                var conv = activeConversation ?: createDirectAudioConversation(e)
+                activeConversation = conv
+                val tokensBeforeTurn = conv.getTokenCount()
+                if (tokensBeforeTurn >= DIRECT_AUDIO_COMPACTION_THRESHOLD_TOKENS) {
+                    conv = compactDirectAudioConversation(e, conv, tokensBeforeTurn)
+                    activeConversation = conv
                 }
-                val conv = activeConversation!!
 
                 val full = StringBuilder()
                 val chunkAcc = StringBuilder()
@@ -325,7 +376,7 @@ class LocalGemmaAssistant(private val context: Context) {
                     }
 
                     conv.sendMessageAsync(
-                        Contents.of(Content.AudioBytes(partWav.readBytes()), Content.Text(promptText)),
+                        Contents.of(Content.AudioFile(partWav.absolutePath), Content.Text(promptText)),
                         callback,
                         mapOf("clear_kv_cache_before_prefill" to false)
                     )
@@ -347,7 +398,6 @@ class LocalGemmaAssistant(private val context: Context) {
                     "BENCH context_usage used=$contextTokens max=$MAX_NUM_TOKENS " +
                         "percent=${contextTokens * 100 / MAX_NUM_TOKENS}"
                 )
-                activeConversationTurns++
                 if (reply.isNotEmpty()) {
                     synchronized(conversationHistory) {
                         conversationHistory.add(DialogTurn("user", "[Audio ${"%.1f".format(audioDurationSec)}s]"))
@@ -359,7 +409,6 @@ class LocalGemmaAssistant(private val context: Context) {
                 Log.e(TAG, "Gemma E2B Direct Audio processing failed, resetting conversation and falling back", t)
                 runCatching { activeConversation?.close() }
                 activeConversation = null
-                activeConversationTurns = 0
                 wavFiles.forEach { runCatching { it.delete() } }
                 val fallbackPrompt = "Der Gesprächspartner hat gesprochen (${"%.1f".format(audioDurationSec)}s). Antworte freundlich auf Deutsch:"
                 streamChatResponse(fallbackPrompt, onChunk)
