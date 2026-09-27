@@ -207,9 +207,9 @@ class MainActivity : ComponentActivity() {
                     try {
                         com.sisa.app.download.AppModelManager.downloadModel(
                             context = this@MainActivity,
-                            urlString = com.sisa.app.download.AppModelManager.GEMMA_4_GPU_URL,
+                            urlString = com.sisa.app.download.AppModelManager.GEMMA_4_URL,
                             targetFileName = com.sisa.app.download.AppModelManager.GEMMA_FILE,
-                            expectedCrc32 = com.sisa.app.download.AppModelManager.GEMMA_4_GPU_CRC
+                            expectedSha256 = com.sisa.app.download.AppModelManager.GEMMA_4_SHA256
                         ).collect { progress ->
                             if (progress.isCompleted) {
                                 android.util.Log.i("LiveMode", "Gemma model download completed")

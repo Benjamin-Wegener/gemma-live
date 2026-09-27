@@ -91,7 +91,7 @@ class LocalGemmaAssistant(private val context: Context) {
 
     companion object {
         private const val TAG = "LocalGemma"
-        const val MODEL_FILE = "gemma-4-E2B-it-gpu.litertlm"
+        const val MODEL_FILE = "gemma-4-E2B-it.litertlm"
         /** Offizielles Basismodell (litert-community, multimodal inkl. Audio-Encoder).
          * Wird bevorzugt, wenn vorhanden — die -gpu-Variante ist Text-Decoder-only. */
         const val MODEL_FILE_MULTIMODAL = "gemma-4-E2B-it.litertlm"

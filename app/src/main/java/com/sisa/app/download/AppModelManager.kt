@@ -29,14 +29,17 @@ data class DownloadProgress(
 object AppModelManager {
 
     // File names (single source of truth, also used by onboarding)
-    const val GEMMA_FILE = "gemma-4-E2B-it-gpu.litertlm"
+    /** Multimodales Gemma 4 mit dem für Direct Audio nötigen Audio-Encoder. */
+    const val GEMMA_FILE = "gemma-4-E2B-it.litertlm"
     const val VOICE_MODEL_FILE = "de_DE-kerstin-low.onnx"
     const val VOICE_CONFIG_FILE = "de_DE-kerstin-low.onnx.json"
     const val VOICE_TOKENS_FILE = "tokens.txt"
     const val ESPEAK_DATA_DIR = "espeak-ng-data"
     private const val ESPEAK_SENTINEL = "espeak-ng-data/phontab"
 
-    const val GEMMA_4_GPU_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-gpu.litertlm"
+    const val GEMMA_4_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+    /** SHA-256 des von litert-community veröffentlichten LFS-Artefakts. */
+    const val GEMMA_4_SHA256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c"
 
     // Piper voice models by language
     data class VoiceModel(
@@ -338,6 +341,18 @@ object AppModelManager {
         return crc.value
     }
 
+    fun calculateSha256(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(256 * 1024)
+        file.inputStream().use { input ->
+            var bytes: Int
+            while (input.read(buffer).also { bytes = it } != -1) {
+                if (bytes > 0) digest.update(buffer, 0, bytes)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     /**
      * Imports an existing copy from
      * Downloads/SIS_Models (e.g. pushed via USB or from an older
@@ -442,17 +457,23 @@ object AppModelManager {
         context: Context,
         urlString: String,
         targetFileName: String,
-        expectedCrc32: Long? = null
+        expectedCrc32: Long? = null,
+        expectedSha256: String? = null
     ): Flow<DownloadProgress> = flow {
-        requireNotNull(expectedCrc32) { "CRC32 checksum is mandatory (fail-closed)" }
+        require(expectedCrc32 != null || expectedSha256 != null) { "A checksum is mandatory (fail-closed)" }
+        fun isValid(file: File): Boolean = when {
+            expectedSha256 != null -> calculateSha256(file).equals(expectedSha256, ignoreCase = true)
+            expectedCrc32 != null -> calculateCrc32(file) == expectedCrc32
+            else -> false
+        }
 
         val targetDir = getModelsDir(context)
         val targetFile = File(targetDir, targetFileName)
         val tempFile = File(targetDir, "$targetFileName.download")
 
-        // Already valid file -> report ready immediately (CRC verified)
+        // Already valid file -> report ready immediately (checksum verified)
         if (targetFile.exists() && !tempFile.exists()) {
-            if (calculateCrc32(targetFile) == expectedCrc32) {
+            if (isValid(targetFile)) {
                 publishToPublicDownloads(context, targetFileName)
                 emit(DownloadProgress(targetFileName, targetFile.length(), targetFile.length(), true))
                 return@flow
@@ -466,9 +487,11 @@ object AppModelManager {
         // Always import via MediaStore first instead of re-downloading —
         // a complete local file beats any resume. On success discard old
         // partial download.
-        val imported = tryImportFromPublicDownloads(context, targetFileName, expectedCrc32) { copied, total ->
-            emit(DownloadProgress(targetFileName, copied, total, false))
-        }
+        val imported = if (expectedCrc32 != null) {
+            tryImportFromPublicDownloads(context, targetFileName, expectedCrc32) { copied, total ->
+                emit(DownloadProgress(targetFileName, copied, total, false))
+            }
+        } else null
         if (imported != null) {
             try { if (tempFile.exists()) tempFile.delete() } catch (_: Exception) {}
             emit(DownloadProgress(targetFileName, imported.length(), imported.length(), true))
@@ -529,14 +552,13 @@ object AppModelManager {
                 }
             }
 
-            // CRC32 mandatory check before final rename (fail-closed)
-            val actualCrc = withContext(Dispatchers.IO) { calculateCrc32(tempFile) }
-            if (actualCrc != expectedCrc32) {
+            // Mandatory checksum check before final rename (fail-closed).
+            if (!withContext(Dispatchers.IO) { isValid(tempFile) }) {
                 tempFile.delete()
                 emit(
                     DownloadProgress(
                         targetFileName, 0, 0, false,
-                        "CRC check failed: expected 0x${expectedCrc32.toString(16)}, got 0x${actualCrc.toString(16)} — file discarded"
+                        "Checksum verification failed — file discarded"
                     )
                 )
                 return@flow
