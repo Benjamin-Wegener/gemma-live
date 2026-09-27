@@ -24,7 +24,9 @@ class TurnDetector(
         val speechStartThresholdDb: Float = -38f,
         val speechStopThresholdDb: Float = -46f,
         val minSpeechFrames: Int = 3,
-        val minSilenceFrames: Int = 12,
+        // 25 × 32 ms = 800 ms. Kurze natürliche Pausen innerhalb eines Satzes
+        // dürfen keinen neuen KI-Turn auslösen.
+        val minSilenceFrames: Int = 25,
         val modelAssetPath: String = "vad/silero_vad.onnx",
         val modelFilename: String = "silero_vad.onnx",
     )
@@ -77,7 +79,7 @@ class TurnDetector(
                 // Erst Asset-Pfad (sherpa öffnet via AssetManager), sonst Datei
                 model = config.modelAssetPath
                 threshold = 0.5f
-                minSilenceDuration = 0.20f // 200ms für ultraschnelles Turn-Ende
+                minSilenceDuration = 0.80f // Satzende, keine Binnenpause
                 minSpeechDuration = 0.15f  // 150ms
             }
             val vadConfig = VadModelConfig().apply {
@@ -95,7 +97,7 @@ class TurnDetector(
                 val silero = SileroVadModelConfig().apply {
                     model = file.absolutePath
                     threshold = 0.5f
-                    minSilenceDuration = 0.20f // 200ms für ultraschnelles Turn-Ende
+                    minSilenceDuration = 0.80f // Satzende, keine Binnenpause
                     minSpeechDuration = 0.15f
                 }
                 val vadConfig = VadModelConfig().apply {
