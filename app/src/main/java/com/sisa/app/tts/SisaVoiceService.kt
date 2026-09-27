@@ -232,7 +232,7 @@ class SisaVoiceService(
         }
     }
 
-    fun speak(text: String, speed: Float = 1.1f, onDone: () -> Unit = {}) {
+    fun speak(text: String, speed: Float = 0.98f, onDone: () -> Unit = {}) {
         if (text.isBlank()) {
             onDone()
             return
@@ -357,7 +357,7 @@ class SisaVoiceService(
         withContext(Dispatchers.Default) {
             if (stopRequested || samples.isEmpty()) return@withContext
             val pcm = ShortArray(samples.size) { i ->
-                (samples[i].coerceIn(-1f, 1f) * 32767).toInt().toShort()
+                (samples[i] * TTS_GAIN).coerceIn(-1f, 1f).times(32767).toInt().toShort()
             }
             pcmChannel?.send(pcm)
         }
@@ -410,6 +410,8 @@ class SisaVoiceService(
 
     companion object {
         private const val TAG = "SisaVoice"
+        /** Moderater Software-Gain; begrenzt vor der PCM16-Konvertierung. */
+        private const val TTS_GAIN = 1.20f
 
         /**
          * Nachhall-Fenster nach dem physischen Audioende. In diesem Zeitraum startende
