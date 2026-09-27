@@ -220,6 +220,10 @@ def main():
         thorsten_text = qwen.generate_reply(last_gemma_text)
 
         wav_file = os.path.join(tmp_dir, f"turn_{turn}.wav")
+        # Jeder Turn bekommt einen frischen Logcat-Puffer. Ohne das liest der
+        # nachfolgende Monitor bereits abgeschlossene Playback-Ereignisse aus
+        # dem vorherigen Turn und ordnet sie fälschlich dem neuen Satz zu.
+        subprocess.run(["adb", "logcat", "-c"], check=True)
         mac_turn = tts.speak(thorsten_text, wav_file)
         pixel_turn = wait_for_gemma_response()
         report["turns"].append({"turn": turn, "mac": mac_turn, "pixel": pixel_turn})
