@@ -134,6 +134,7 @@ def wait_for_gemma_response(timeout=35):
     start_time = time.time()
     stt_text = ""
     gemma_text = ""
+    context_usage = None
     events = []
     first_token_at = None
     playback_complete_at = None
@@ -161,6 +162,12 @@ def wait_for_gemma_response(timeout=35):
                 gemma_text = m.group(1) if m else ""
                 event.update({"kind": "gemma_reply", "text": gemma_text})
                 print(f"   🤖 [Gemma / Pixel]: \"{gemma_text}\"")
+            elif "BENCH context_usage" in line:
+                m = re.search(r'used=(\d+) max=(\d+) percent=(\d+)', line)
+                if m:
+                    context_usage = {"used": int(m.group(1)), "max": int(m.group(2)), "percent": int(m.group(3))}
+                    event.update({"kind": "context_usage", **context_usage})
+                    print(f"   🧠 Kontext: {context_usage['used']}/{context_usage['max']} ({context_usage['percent']}%)")
             elif "BENCH playback_complete" in line:
                 playback_complete_at = event["at"]
                 event["kind"] = "playback_complete"
@@ -181,6 +188,7 @@ def wait_for_gemma_response(timeout=35):
     return {
         "recognized_text": stt_text or None,
         "gemma_reply": gemma_text or None,
+        "context_usage": context_usage,
         "first_token_at": first_token_at,
         "playback_complete_at": playback_complete_at,
         "timed_out": playback_complete_at is None,
@@ -197,6 +205,12 @@ def write_report(report):
         print(f"{turn['turn']:02d}  Mac:    {turn['mac']['text']}")
         print(f"    erkannt: {turn['pixel']['recognized_text'] or '—'}")
         print(f"    Gemma:  {turn['pixel']['gemma_reply'] or '—'}")
+        context = turn["pixel"]["context_usage"]
+        context_label = (
+            f"{context['used']}/{context['max']} ({context['percent']}%)"
+            if context else "—"
+        )
+        print(f"    Kontext: {context_label}")
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-turn Dialog Test Harness")

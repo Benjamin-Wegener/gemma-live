@@ -69,6 +69,9 @@ class TeeAudioTrack(
     // Letzter Sample des vorherigen write() für die Interpolation über Chunk-Grenzen.
     private var lastSample: Float = 0f
     private var playbackScratch = ShortArray(0)
+    /** FastTrack braucht beim Beginn einer neuen Ausgabe einen kurzen Vorlauf, sonst kann
+     * der erste DMA-Puffer (und damit die ersten Silben) unterlaufen. */
+    private var needsPriming = true
 
     init {
         // AAudio Low-Latency FastTrack: PERFORMANCE_MODE_LOW_LATENCY route den Stream
@@ -162,6 +165,14 @@ class TeeAudioTrack(
     fun write(audioData: ShortArray, offsetInShorts: Int, sizeInShorts: Int): Int {
         val nowNs = SystemClock.elapsedRealtimeNanos()
         val head = track.playbackHeadPosition
+
+        if (needsPriming) {
+            needsPriming = false
+            val primeFrames = playbackRate * 80 / 1000
+            val primed = track.write(ShortArray(primeFrames), 0, primeFrames)
+            if (primed > 0) writtenFrames += primed
+            Log.i("BENCH", "BENCH tts_playback_primed t_elapsed_ns=$nowNs frames=$primeFrames")
+        }
 
         if (isFirstChunk) {
             isFirstChunk = false
@@ -262,6 +273,7 @@ class TeeAudioTrack(
         phase = 0.0
         lastSample = 0f
         isFirstChunk = true
+        needsPriming = true
     }
 
     fun stop() {

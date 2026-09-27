@@ -257,6 +257,7 @@ class LocalGemmaAssistant(private val context: Context) {
                     runCatching { activeConversation?.close() }
                     activeConversation = e.createConversation(
                         ConversationConfig(
+                            systemInstruction = Contents.of(Content.Text(SYSTEM_PROMPT)),
                             samplerConfig = SamplerConfig(
                                 topK = LLM_TOP_K,
                                 topP = LLM_TOP_P,
@@ -340,6 +341,12 @@ class LocalGemmaAssistant(private val context: Context) {
                 val reply = sanitizeLlmOutput(full.toString())
                 Log.i(TAG, "Gemma E2B Direct Audio Antwort generiert: \"$reply\"")
                 Log.i("BENCH", "BENCH turn_completed reply=\"$reply\"")
+                val contextTokens = conv.getTokenCount()
+                Log.i(
+                    "BENCH",
+                    "BENCH context_usage used=$contextTokens max=$MAX_NUM_TOKENS " +
+                        "percent=${contextTokens * 100 / MAX_NUM_TOKENS}"
+                )
                 activeConversationTurns++
                 if (reply.isNotEmpty()) {
                     synchronized(conversationHistory) {
