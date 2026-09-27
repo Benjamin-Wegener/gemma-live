@@ -13,6 +13,7 @@ local.properties
 *.aab
 recordings/
 test_recordings/
+test_results/echo_2026-09-27/dialog_runs/
 *.wav
 *.mp3
 *.pcm
