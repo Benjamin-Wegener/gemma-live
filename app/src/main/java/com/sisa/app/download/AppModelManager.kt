@@ -36,6 +36,9 @@ object AppModelManager {
     const val VOICE_TOKENS_FILE = "tokens.txt"
     const val ESPEAK_DATA_DIR = "espeak-ng-data"
     private const val ESPEAK_SENTINEL = "espeak-ng-data/phontab"
+    private const val MODEL_DOWNLOAD_FOLDER = "Download/models"
+
+    private fun publicDownloadFolder(filename: String): String = MODEL_DOWNLOAD_FOLDER
 
     const val GEMMA_4_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
     /** SHA-256 des von litert-community veröffentlichten LFS-Artefakts. */
@@ -238,13 +241,13 @@ object AppModelManager {
     fun isPublicCopyPresent(context: Context, filename: String): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             @Suppress("DEPRECATION")
-            val legacy = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SIS_Models/$filename")
+            val legacy = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "${publicDownloadFolder(filename).removePrefix("Download/")}/$filename")
             return legacy.exists() && legacy.length() > 1024
         }
         return try {
             val projection = arrayOf(MediaStore.Downloads.SIZE)
             val selection = "${MediaStore.Downloads.DISPLAY_NAME}=? AND ${MediaStore.Downloads.RELATIVE_PATH} LIKE ?"
-            val args = arrayOf(filename, "%SIS_Models%")
+            val args = arrayOf(filename, "%${publicDownloadFolder(filename).removePrefix("Download/")}%")
             context.contentResolver.query(
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI, projection, selection, args, null
             )?.use { cursor ->
@@ -284,7 +287,7 @@ object AppModelManager {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, filename)
                 put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
-                put(MediaStore.Downloads.RELATIVE_PATH, "Download/SIS_Models")
+                put(MediaStore.Downloads.RELATIVE_PATH, publicDownloadFolder(filename))
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
@@ -383,7 +386,7 @@ object AppModelManager {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext null
         try {
             val sel = "${MediaStore.Downloads.DISPLAY_NAME}=? AND ${MediaStore.Downloads.RELATIVE_PATH} LIKE ?"
-            val args = arrayOf(filename, "%SIS_Models%")
+            val args = arrayOf(filename, "%${publicDownloadFolder(filename).removePrefix("Download/")}%")
             data class Candidate(val uri: android.net.Uri, val size: Long)
             val candidates = mutableListOf<Candidate>()
             context.contentResolver.query(
