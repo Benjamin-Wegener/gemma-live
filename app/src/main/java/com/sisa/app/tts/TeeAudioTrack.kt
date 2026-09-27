@@ -69,7 +69,7 @@ class TeeAudioTrack(
     // Letzter Sample des vorherigen write() für die Interpolation über Chunk-Grenzen.
     private var lastSample: Float = 0f
     private var playbackScratch = ShortArray(0)
-    /** FastTrack braucht beim Beginn einer neuen Ausgabe einen kurzen Vorlauf, sonst kann
+    /** FastTrack braucht beim Beginn einer neuen Ausgabe einen stabilen Vorlauf, sonst kann
      * der erste DMA-Puffer (und damit die ersten Silben) unterlaufen. */
     private var needsPriming = true
 
@@ -168,7 +168,10 @@ class TeeAudioTrack(
 
         if (needsPriming) {
             needsPriming = false
-            val primeFrames = playbackRate * 80 / 1000
+            // 80 ms war auf dem Pixel noch zu knapp: beim Aufwachen des Fast-Mixers
+            // verschwand der erste TTS-Puffer hörbar. 200 ms sind nur Stille vor dem
+            // Satz, geben Route, Verstärker und DMA aber zuverlässig Zeit zum Anlaufen.
+            val primeFrames = playbackRate * 200 / 1000
             val primed = track.write(ShortArray(primeFrames), 0, primeFrames)
             if (primed > 0) writtenFrames += primed
             Log.i("BENCH", "BENCH tts_playback_primed t_elapsed_ns=$nowNs frames=$primeFrames")

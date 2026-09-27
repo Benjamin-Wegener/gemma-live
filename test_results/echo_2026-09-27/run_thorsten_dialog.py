@@ -21,7 +21,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 import wave
 from datetime import datetime, timezone
@@ -35,6 +34,8 @@ except ImportError:
 
 PIPER_BIN = "/Users/user/.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/bin/piper"
 THORSTEN_MODEL = "/Users/user/Gemma-Live/de_DE-thorsten-medium.onnx"
+FFMPEG_BIN = "/opt/brew/bin/ffmpeg"
+WHISPER_MODEL_DIR = Path("/Users/user/Gemma-Live/tools/outside_llm/models/sherpa-onnx-whisper-tiny")
 PKG = "com.sisa.app.live"
 ACT = f"{PKG}/com.sisa.app.ui.MainActivity"
 RESULTS_DIR = Path(__file__).with_name("dialog_runs")
@@ -77,6 +78,58 @@ class ThorstenTTS:
             "ended_at": utc_now(),
             "playback_elapsed_ms": round((time.monotonic() - started_monotonic) * 1000),
         }
+
+class GemmaAudioCapture:
+    """Nimmt Gemmas Lautsprecherantwort über das Mac-Mikrofon als unabhängigen Testbeleg auf."""
+    def __init__(self, wav_path: str):
+        self.wav_path = wav_path
+        self.process = None
+
+    def start(self):
+        # Die Aufnahme beginnt nach Thorstens Satz und vor Gemmas mindestens 800-ms-VAD-Pause.
+        # Damit enthält sie die physisch hörbare Gemma-Antwort, nicht Thorstens Eingabe.
+        self.process = subprocess.Popen(
+            [FFMPEG_BIN, "-y", "-f", "avfoundation", "-i", ":default",
+             "-ar", "16000", "-ac", "1", "-acodec", "pcm_s16le", self.wav_path],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        )
+        time.sleep(0.15)  # AVFoundation-Mikrofon vollständig öffnen, bevor Gemma startet.
+
+    def stop(self):
+        if not self.process:
+            return None
+        try:
+            self.process.stdin.write(b"q")
+            self.process.stdin.flush()
+            self.process.wait(timeout=10)
+        except (BrokenPipeError, OSError, subprocess.TimeoutExpired):
+            self.process.kill()
+            self.process.wait()
+        return self.wav_path if Path(self.wav_path).exists() else None
+
+def transcribe_gemma_audio(wav_path):
+    """Lokales Whisper (sherpa-onnx) für die tatsächlich am Mac gehörte Antwort."""
+    if not wav_path:
+        return {"text": None, "engine": "sherpa-onnx-whisper-tiny", "error": "Keine Aufnahme"}
+    try:
+        import numpy as np
+        import sherpa_onnx
+        with wave.open(wav_path, "rb") as wav:
+            if wav.getframerate() != 16000 or wav.getnchannels() != 1:
+                raise RuntimeError("Aufnahme ist nicht 16-kHz-Mono-WAV")
+            samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+        recognizer = sherpa_onnx.OfflineRecognizer.from_whisper(
+            encoder=str(WHISPER_MODEL_DIR / "tiny-encoder.int8.onnx"),
+            decoder=str(WHISPER_MODEL_DIR / "tiny-decoder.int8.onnx"),
+            tokens=str(WHISPER_MODEL_DIR / "tiny-tokens.txt"),
+            num_threads=4, language="de", task="transcribe",
+        )
+        stream = recognizer.create_stream()
+        stream.accept_waveform(16000, samples)
+        recognizer.decode_stream(stream)
+        return {"text": stream.result.text.strip() or None, "engine": "sherpa-onnx-whisper-tiny", "error": None}
+    except Exception as exc:
+        return {"text": None, "engine": "sherpa-onnx-whisper-tiny", "error": str(exc)}
 
 class QwenAgent:
     def __init__(self, base_url: str):
@@ -204,7 +257,11 @@ def write_report(report):
     for turn in report["turns"]:
         print(f"{turn['turn']:02d}  Mac:    {turn['mac']['text']}")
         print(f"    erkannt: {turn['pixel']['recognized_text'] or '—'}")
-        print(f"    Gemma:  {turn['pixel']['gemma_reply'] or '—'}")
+        print(f"    Gemma (Log):     {turn['pixel']['gemma_reply'] or '—'}")
+        heard = turn["gemma_audio"]
+        print(f"    Gemma (gehört):  {heard['whisper']['text'] or '—'}")
+        if heard["whisper"]["error"]:
+            print(f"    Whisper-Fehler:  {heard['whisper']['error']}")
         context = turn["pixel"]["context_usage"]
         context_label = (
             f"{context['used']}/{context['max']} ({context['percent']}%)"
@@ -224,24 +281,46 @@ def main():
     tts = ThorstenTTS()
     qwen = QwenAgent(base_url=args.qwen_url)
 
-    tmp_dir = tempfile.mkdtemp()
+    # Belege bleiben neben dem JSON-Protokoll erhalten statt in einem flüchtigen /tmp-Ordner.
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tmp_dir = RESULTS_DIR / f"audio_{run_id}"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n🚀 Starte Dialog-Test über {args.turns} Turns...")
 
-    report = {"started_at": utc_now(), "turns": []}
+    report = {
+        "started_at": utc_now(),
+        "validation": "Gemmas akustisch aufgenommene Antwort wird lokal mit Whisper transkribiert; Logcat ist nur Vergleichstelemetrie.",
+        "turns": [],
+    }
     last_gemma_text = None
     for turn in range(1, args.turns + 1):
         print(f"\n--- Turn {turn}/{args.turns} ---")
         thorsten_text = qwen.generate_reply(last_gemma_text)
 
-        wav_file = os.path.join(tmp_dir, f"turn_{turn}.wav")
+        wav_file = str(tmp_dir / f"thorsten_turn_{turn}.wav")
         # Jeder Turn bekommt einen frischen Logcat-Puffer. Ohne das liest der
         # nachfolgende Monitor bereits abgeschlossene Playback-Ereignisse aus
         # dem vorherigen Turn und ordnet sie fälschlich dem neuen Satz zu.
         subprocess.run(["adb", "logcat", "-c"], check=True)
         mac_turn = tts.speak(thorsten_text, wav_file)
+        gemma_wav = str(tmp_dir / f"gemma_turn_{turn}_mac_mic.wav")
+        capture = GemmaAudioCapture(gemma_wav)
+        capture.start()
         pixel_turn = wait_for_gemma_response()
-        report["turns"].append({"turn": turn, "mac": mac_turn, "pixel": pixel_turn})
-        last_gemma_text = pixel_turn["gemma_reply"]
+        # Ein kleiner Nachlauf hält das physische Satzende in der WAV-Datei fest.
+        time.sleep(0.5)
+        recorded_wav = capture.stop()
+        heard = transcribe_gemma_audio(recorded_wav)
+        gemma_audio = {"wav": recorded_wav, "whisper": heard}
+        print(f"   🎙️ Gemma am Mac gehört (Whisper): \"{heard['text'] or '—'}\"")
+        if heard["error"]:
+            print(f"   ⚠️ Mac-Whisper konnte die Aufnahme nicht auswerten: {heard['error']}")
+        report["turns"].append({
+            "turn": turn, "mac": mac_turn, "pixel": pixel_turn, "gemma_audio": gemma_audio
+        })
+        # Die nächste Thorsten-Antwort basiert auf dem Gehörten. Nur bei einem technischen
+        # Whisper-Ausfall greift der Test auf die Logcat-Telemetrie zurück.
+        last_gemma_text = heard["text"] or pixel_turn["gemma_reply"]
 
     print("\n🎉 Dialog-Test beendet!")
     report["finished_at"] = utc_now()
