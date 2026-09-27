@@ -50,6 +50,7 @@ import com.sisa.app.stt.AndroidSttManager
 import com.sisa.app.tts.AndroidTtsService
 import com.sisa.app.tts.SisaVoiceService
 import kotlinx.coroutines.*
+import java.util.concurrent.atomic.AtomicBoolean
 
 enum class LiveState {
     LOADING, IDLE, LISTENING, THINKING, SPEAKING
@@ -80,6 +81,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var localGemma: LocalGemmaAssistant
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val speechMutex = kotlinx.coroutines.sync.Mutex()
+    /** Direct-audio turns must never wait behind the legacy text/STT path. */
+    private val directAudioInFlight = AtomicBoolean(false)
     // Zeitpunkt (elapsedRealtime) des letzten echten User-Inputs via Broadcast.
     // Verhindert im BENCHMARK_MODE Doppel-Antworten: feuert VAD-SpeechStopped kurz
     // nach einem Broadcast (externer Loop spricht), wird der Hardcode-Turn
@@ -720,21 +723,25 @@ class MainActivity : ComponentActivity() {
                                         // Do not queue this hand-off on Dispatchers.Main: a busy UI must never
                                         // make a completed VAD turn disappear without inference or a log entry.
                                         Log.i("LiveMode", "Direct audio turn queued (${samplesToUse.size} samples)")
+                                        if (!directAudioInFlight.compareAndSet(false, true)) {
+                                            Log.w("LiveMode", "VAD turn skipped: direct-audio inference is already active")
+                                            return@process
+                                        }
                                         scope.launch(Dispatchers.Default) {
-                                            speechMutex.lock()
                                             try {
-                                                val canStart = withContext(Dispatchers.Main) {
-                                                    val busy = liveState.value == LiveState.SPEAKING ||
-                                                        liveState.value == LiveState.THINKING
-                                                    if (!busy) {
-                                                        currentTranscript.value = "Gemma E2B audio input (${"%.1f".format(samplesToUse.size / 16000.0)}s)…"
-                                                        liveState.value = LiveState.THINKING
-                                                    }
-                                                    !busy
-                                                }
-                                                if (!canStart) {
+                                                Log.i("LiveMode", "Direct audio turn acquired inference lock")
+                                                val busy = liveState.value == LiveState.SPEAKING ||
+                                                    liveState.value == LiveState.THINKING
+                                                if (busy) {
                                                     Log.w("LiveMode", "VAD turn skipped: another turn is already active")
                                                     return@launch
+                                                }
+                                                // Post UI state without awaiting Dispatchers.Main. Awaiting it here
+                                                // was the deadlock: the audio turn held the only inference lock while
+                                                // the UI dispatcher did not run the continuation.
+                                                scope.launch(Dispatchers.Main) {
+                                                    currentTranscript.value = "Gemma E2B audio input (${"%.1f".format(samplesToUse.size / 16000.0)}s)…"
+                                                    liveState.value = LiveState.THINKING
                                                 }
                                                 Log.i("LiveMode", "Gemma E2B Direct Audio Processing started (${samplesToUse.size} samples)")
                                                 val onChunkReceived: (String) -> Unit = { chunk ->
@@ -743,7 +750,7 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 }
                                                 val resp = localGemma.processAudioDirectly(samplesToUse, onChunkReceived)
-                                                withContext(Dispatchers.Main) {
+                                                scope.launch(Dispatchers.Main) {
                                                     if (resp.isBlank()) {
                                                         Log.w("LiveMode", "Gemma returned an empty direct-audio response")
                                                         liveState.value = LiveState.IDLE
@@ -762,9 +769,9 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             } catch (t: Throwable) {
                                                 Log.e("LiveMode", "Direct audio turn failed", t)
-                                                withContext(Dispatchers.Main) { liveState.value = LiveState.IDLE }
+                                                scope.launch(Dispatchers.Main) { liveState.value = LiveState.IDLE }
                                             } finally {
-                                                speechMutex.unlock()
+                                                directAudioInFlight.set(false)
                                             }
                                         }
                                     }
