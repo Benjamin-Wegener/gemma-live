@@ -1,0 +1,81 @@
+{
+  "scenario_file": "/Users/user/Documents/SIS/Gemma-Live/tools/bench/scenarios/vad_sweep.yaml",
+  "pre_clock_sync": {
+    "device_offset_ns": 260014798,
+    "device_offset_ms": 260.01479815598594,
+    "drift_ns_per_sec": -9575341.528168567,
+    "median_rtt_ms": 819.559,
+    "min_rtt_ms": 364.724,
+    "samples_used": 15
+  },
+  "runs": [
+    {
+      "scenario": "vad_short_pause_200ms",
+      "validation": {
+        "frame_in": "OK",
+        "speech_started": "OK",
+        "speech_stopped": "OK"
+      },
+      "metrics": {
+        "ttfa_ms": null,
+        "ttft_ms": null,
+        "vad_turn_lag_ms": 0.0,
+        "tts_chunk_delays_mean_ms": null,
+        "tts_chunk_delays_p95_ms": null,
+        "tts_chunk_count": 0,
+        "barge_in_rt_ms": null,
+        "recognized_text": "",
+        "wer": 0.0
+      },
+      "pulled_pcm": null
+    },
+    {
+      "scenario": "vad_long_pause_800ms",
+      "validation": {
+        "speech_started": "OK",
+        "speech_stopped": "OK"
+      },
+      "metrics": {
+        "ttfa_ms": null,
+        "ttft_ms": null,
+        "vad_turn_lag_ms": 0.0,
+        "tts_chunk_delays_mean_ms": null,
+        "tts_chunk_delays_p95_ms": null,
+        "tts_chunk_count": 0,
+        "barge_in_rt_ms": null,
+        "recognized_text": "",
+        "wer": 0.0
+      },
+      "pulled_pcm": null
+    },
+    {
+      "scenario": "vad_noise_snr10db",
+      "validation": {
+        "speech_started": "OK",
+        "speech_stopped": "OK"
+      },
+      "metrics": {
+        "ttfa_ms": null,
+        "ttft_ms": 3495.57,
+        "vad_turn_lag_ms": 0.0,
+        "tts_chunk_delays_mean_ms": null,
+        "tts_chunk_delays_p95_ms": null,
+        "tts_chunk_count": 0,
+        "barge_in_rt_ms": null,
+        "recognized_text": "",
+        "wer": 0.0,
+        "tee_samples_captured": 0,
+        "tee_duration_sec": 0.0
+      },
+      "pulled_pcm": "tools/bench/pulled_pcm/tee_1790059043057.pcm"
+    }
+  ],
+  "post_clock_sync": {
+    "device_offset_ns": 339188786,
+    "device_offset_ms": 339.1887868883608,
+    "drift_ns_per_sec": 2674190.2449657894,
+    "median_rtt_ms": 659.924,
+    "min_rtt_ms": 375.583,
+    "samples_used": 15
+  }
+}
