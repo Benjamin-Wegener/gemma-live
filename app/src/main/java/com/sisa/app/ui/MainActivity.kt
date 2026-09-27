@@ -16,8 +16,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -142,11 +144,13 @@ class MainActivity : ComponentActivity() {
     private var volumeLevel = mutableFloatStateOf(0f)
     private var isHandsFreeActive = mutableStateOf(false)
     private var isEngineReady = mutableStateOf(false)
-    private var engineStatus = mutableStateOf("Engine wird geladen …")
+    private var engineStatus = mutableStateOf("Loading engine …")
     private var benchRunning = mutableStateOf(false)
     private var benchStatus = mutableStateOf("")
     private var benchReport = mutableStateOf<LlmBenchmark.Report?>(null)
     private var showBenchDialog = mutableStateOf(false)
+    var showVoiceSelector = mutableStateOf(false)
+    var selectedVoiceId = mutableStateOf("de_DE-kerstin-low")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audioSourceMode = loadAudioSourceMode()
@@ -187,20 +191,66 @@ class MainActivity : ComponentActivity() {
         localGemma = LocalGemmaAssistant(this)
         liveState.value = LiveState.LOADING
         isHandsFreeActive.value = false
-        engineStatus.value = "Engine wird geladen …"
+        engineStatus.value = "Loading engine …"
         scope.launch(Dispatchers.Default) {
+            // Auto-download Gemma model if not found (with progress, resume, retry)
+            if (!com.sisa.app.download.AppModelManager.isModelInstalled(this@MainActivity, com.sisa.app.download.AppModelManager.GEMMA_FILE)) {
+                engineStatus.value = "Downloading Gemma model…"
+                android.util.Log.i("LiveMode", "Gemma model not found, starting auto-download")
+                var retryCount = 0
+                val maxRetries = 3
+                var downloadSuccess = false
+                while (retryCount < maxRetries && !downloadSuccess) {
+                    try {
+                        com.sisa.app.download.AppModelManager.downloadModel(
+                            context = this@MainActivity,
+                            urlString = com.sisa.app.download.AppModelManager.GEMMA_4_GPU_URL,
+                            targetFileName = com.sisa.app.download.AppModelManager.GEMMA_FILE,
+                            expectedCrc32 = com.sisa.app.download.AppModelManager.GEMMA_4_GPU_CRC
+                        ).collect { progress ->
+                            if (progress.isCompleted) {
+                                android.util.Log.i("LiveMode", "Gemma model download completed")
+                                downloadSuccess = true
+                            } else if (progress.error != null) {
+                                android.util.Log.e("LiveMode", "Gemma model download error: ${progress.error}")
+                            } else {
+                                val percent = (progress.progressPercent * 100).toInt()
+                                val mb = progress.bytesDownloaded / (1024 * 1024)
+                                val totalMb = progress.totalBytes / (1024 * 1024)
+                                withContext(Dispatchers.Main) {
+                                    engineStatus.value = "Downloading Gemma model… $percent% ($mb/$totalMb MB)"
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("LiveMode", "Gemma model download failed (attempt ${retryCount + 1}/$maxRetries)", e)
+                        retryCount++
+                        if (retryCount < maxRetries) {
+                            withContext(Dispatchers.Main) {
+                                engineStatus.value = "Download failed, retrying (${retryCount + 1}/$maxRetries)…"
+                            }
+                            kotlinx.coroutines.delay(2000)
+                        }
+                    }
+                }
+                if (!downloadSuccess) {
+                    withContext(Dispatchers.Main) {
+                        engineStatus.value = "Download failed after $maxRetries attempts. Check connection."
+                    }
+                }
+            }
             val loadInfo = localGemma.load()
             withContext(Dispatchers.Main) {
                 if (loadInfo != null) {
-                    android.util.Log.i("LiveMode", "LocalGemma bereit: ${loadInfo.backend.label}, ${loadInfo.modelFile}")
+                    android.util.Log.i("LiveMode", "LocalGemma ready: ${loadInfo.backend.label}, ${loadInfo.modelFile}")
                     isEngineReady.value = true
-                    engineStatus.value = "Bereit (${loadInfo.backend.label})"
-                    // Hands-Free automatisch aktivieren sobald Engine geladen
+                    engineStatus.value = "Ready (${loadInfo.backend.label})"
+                    // Auto-start hands-free once engine is loaded
                     autoStartHandsFree()
                 } else {
-                    android.util.Log.w("LiveMode", "LocalGemma konnte nicht geladen werden (Modell noch nicht importiert?)")
+                    android.util.Log.w("LiveMode", "LocalGemma could not be loaded (model not imported?)")
                     isEngineReady.value = false
-                    engineStatus.value = "Modell fehlt oder konnte nicht geladen werden"
+                    engineStatus.value = "Model missing or could not be loaded"
                     liveState.value = LiveState.IDLE
                 }
             }
@@ -208,14 +258,113 @@ class MainActivity : ComponentActivity() {
 
         registerLiveBroadcastReceiver()
 
+        // Show voice selector on first launch
+        val prefs = getPreferences(MODE_PRIVATE)
+        if (!prefs.getBoolean("voice_selected", false)) {
+            showVoiceSelector.value = true
+        }
+        val voiceSelectorState = showVoiceSelector
+        val selectedVoiceState = selectedVoiceId
+
         setContent {
+            // Voice selector dialog
+            if (voiceSelectorState.value) {
+                val voices = com.sisa.app.download.AppModelManager.PIPER_VOICES
+                var selectedId by remember { mutableStateOf(selectedVoiceState.value) }
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { voiceSelectorState.value = false },
+                    title = { Text("Select Voice", fontWeight = FontWeight.Bold) },
+                    text = {
+                        val scrollState = rememberScrollState()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 400.dp)
+                                .verticalScroll(scrollState)
+                        ) {
+                            voices.forEach { voice ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = selectedId == voice.id,
+                                        onClick = { selectedId = voice.id }
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(voice.name, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            selectedVoiceState.value = selectedId
+                            voiceSelectorState.value = false
+                            prefs.edit().putBoolean("voice_selected", true).apply()
+                            // Set language based on voice selection
+                            val lang = if (selectedId.startsWith("de_")) "de" else "en"
+                            localGemma.currentLanguage = lang
+                            // Download selected voice if needed
+                            scope.launch(Dispatchers.Default) {
+                                val voice = voices.find { it.id == selectedId } ?: return@launch
+                                if (!com.sisa.app.download.AppModelManager.isModelInstalled(this@MainActivity, voice.modelFile)) {
+                                    engineStatus.value = "Downloading voice: ${voice.name}…"
+                                    try {
+                                        com.sisa.app.download.AppModelManager.downloadModel(
+                                            context = this@MainActivity,
+                                            urlString = voice.downloadUrl,
+                                            targetFileName = voice.modelFile,
+                                            expectedCrc32 = if (voice.crc32 != 0L) voice.crc32 else null
+                                        ).collect { progress ->
+                                            if (progress.isCompleted) {
+                                                withContext(Dispatchers.Main) {
+                                                    engineStatus.value = "Voice downloaded: ${voice.name}"
+                                                }
+                                            } else if (progress.error != null) {
+                                                android.util.Log.e("LiveMode", "Voice download error: ${progress.error}")
+                                            } else {
+                                                val pct = (progress.progressPercent * 100).toInt()
+                                                withContext(Dispatchers.Main) {
+                                                    engineStatus.value = "Downloading voice: $pct%"
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("LiveMode", "Voice download failed", e)
+                                    }
+                                }
+                                // Re-init TTS with new voice
+                                sisaVoice.shutdown()
+                                sisaVoice = SisaVoiceService(this@MainActivity, androidTts)
+                                sisaVoice.initAsync { }
+                            }
+                        }) {
+                            Text("OK")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            voiceSelectorState.value = false
+                            prefs.edit().putBoolean("voice_selected", true).apply()
+                        }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
             LiveModeScreen(
                 liveState = liveState.value,
                 transcript = currentTranscript.value,
                 aiResponse = lastAiResponse.value,
                 volumeLevel = volumeLevel.floatValue,
                 engineReady = isEngineReady.value,
-                engineStatus = engineStatus.value
+                engineStatus = engineStatus.value,
+                showVoiceSelector = voiceSelectorState.value,
+                onShowVoiceSelector = { voiceSelectorState.value = it }
             )
         }
     }
@@ -231,7 +380,7 @@ class MainActivity : ComponentActivity() {
         } else {
             // Ladeanzeige bleibt aktiv bis Permission da ist
             liveState.value = LiveState.LOADING
-            engineStatus.value = "Mikrofon-Berechtigung nötig …"
+            engineStatus.value = "Microphone permission needed …"
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 101)
         }
     }
@@ -239,7 +388,7 @@ class MainActivity : ComponentActivity() {
     private fun runLlmBenchmark() {
         if (benchRunning.value) return
         benchRunning.value = true
-        benchStatus.value = "Starte Benchmark …"
+        benchStatus.value = "Starting benchmark …"
         benchReport.value = null
         scope.launch(Dispatchers.Default) {
             try {
@@ -252,11 +401,11 @@ class MainActivity : ComponentActivity() {
                 withContext(Dispatchers.Main) {
                     benchReport.value = report
                     showBenchDialog.value = true
-                    benchStatus.value = "Fertig – ${report.runs.count { it.ok }}/${report.runs.size} Runs ok"
+                    benchStatus.value = "Done – ${report.runs.count { it.ok }}/${report.runs.size} runs ok"
                 }
             } catch (t: Throwable) {
                 android.util.Log.e("LiveMode", "Benchmark failed", t)
-                withContext(Dispatchers.Main) { benchStatus.value = "Fehler: ${t.message}" }
+                withContext(Dispatchers.Main) { benchStatus.value = "Error: ${t.message}" }
             } finally {
                 withContext(Dispatchers.Main) { benchRunning.value = false }
             }
@@ -384,7 +533,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     android.util.Log.e("LiveMode", "LocalGemma nicht verfügbar und kein Fallback aktiv.")
                     liveState.value = LiveState.IDLE
-                    lastAiResponse.value = "Modell wird noch geladen oder ist nicht vorhanden."
+                    lastAiResponse.value = "Model is still loading or not available."
                 }
             } finally {
                 speechMutex.unlock()
@@ -691,7 +840,7 @@ class MainActivity : ComponentActivity() {
                 autoStartHandsFree()
             } else {
                 // Engine lädt noch – autoStartHandsFree feuert nach load()
-                engineStatus.value = "Engine lädt noch …"
+                engineStatus.value = "Engine still loading …"
             }
         }
     }
@@ -713,7 +862,9 @@ fun LiveModeScreen(
     aiResponse: String,
     volumeLevel: Float,
     engineReady: Boolean = true,
-    engineStatus: String = ""
+    engineStatus: String = "",
+    showVoiceSelector: Boolean = false,
+    onShowVoiceSelector: (Boolean) -> Unit = {}
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -745,11 +896,11 @@ fun LiveModeScreen(
     }
 
     val stateTitle = when (liveState) {
-        LiveState.LOADING -> "Gemma lädt …"
-        LiveState.IDLE -> "Bereit zum Zuhören"
-        LiveState.LISTENING -> "Ich höre dir zu..."
-        LiveState.THINKING -> "Gemma denkt nach..."
-        LiveState.SPEAKING -> "Gemma spricht"
+        LiveState.LOADING -> "Gemma loading …"
+        LiveState.IDLE -> "Ready to listen"
+        LiveState.LISTENING -> "Listening to you..."
+        LiveState.THINKING -> "Gemma is thinking..."
+        LiveState.SPEAKING -> "Gemma is speaking"
     }
 
     var showLicensesDialog by remember { mutableStateOf(false) }
@@ -766,7 +917,7 @@ fun LiveModeScreen(
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Open Source Lizenzen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             },
             text = {
@@ -777,6 +928,21 @@ fun LiveModeScreen(
                         .heightIn(max = 420.dp)
                         .verticalScroll(scrollState)
                 ) {
+                    // Voice selection button
+                    Button(
+                        onClick = {
+                            showLicensesDialog = false
+                            onShowVoiceSelector(true)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Select Voice")
+                    }
+
                     Text(
                         text = """
 • Google Gemma & LiteRT-LM
@@ -802,11 +968,7 @@ fun LiveModeScreen(
                     )
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showLicensesDialog = false }) {
-                    Text("Schließen")
-                }
-            }
+            confirmButton = {}
         )
     }
 
@@ -827,25 +989,20 @@ fun LiveModeScreen(
                                     .background(stateColor)
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("Gemma Live Mode", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Gemma Live", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         }
 
-                        // ? Piktogramm in kleinem Kreis oben rechts
+                        // Toggle button: ? <-> X
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .size(32.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onTap = { showLicensesDialog = true },
-                                        onLongPress = { showLicensesDialog = true }
-                                    )
-                                }
+                                .clickable { showLicensesDialog = !showLicensesDialog }
                         ) {
                             Text(
-                                text = "?",
+                                text = if (showLicensesDialog) "✕" else "?",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -889,15 +1046,15 @@ fun LiveModeScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = engineStatus.ifBlank { "Engine wird geladen … Hands-Free startet automatisch" },
+                        text = engineStatus.ifBlank { "Loading engine … Hands-Free starts automatically" },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline,
                         textAlign = TextAlign.Center
                     )
                 } else {
                     Text(
-                        text = if (engineReady) "Vollautomatischer Live-Modus aktiv (Turn-Taking & Barge-In)"
-                        else engineStatus.ifBlank { "Engine nicht bereit" },
+                        text = if (engineReady) "Fully automatic live mode active (Turn-Taking & Barge-In)"
+                        else engineStatus.ifBlank { "Engine not ready" },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline,
                         textAlign = TextAlign.Center,
@@ -948,7 +1105,7 @@ fun LiveModeScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.HourglassTop,
-                                contentDescription = "Lädt",
+                                contentDescription = "Loading",
                                 tint = Color.White,
                                 modifier = Modifier.size(38.dp)
                             )
@@ -986,7 +1143,7 @@ fun LiveModeScreen(
                             Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Column {
-                                Text("Du:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Text("You:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                 Text(transcript, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                             }
                         }

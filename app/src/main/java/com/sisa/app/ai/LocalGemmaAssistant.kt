@@ -110,10 +110,14 @@ class LocalGemmaAssistant(private val context: Context) {
         const val LLM_TEMPERATURE = 0.2
         const val LLM_TOP_K = 20
         const val LLM_TOP_P = 0.90
-        const val SYSTEM_PROMPT =
-            "Du bist Gemma, eine freundliche, hilfsbereite deutsche KI im schnellen " +
-                "Live-Sprachmodus. Antworte ausschließlich auf Deutsch, kurz, prägnant " +
-                "und direkt in 1 bis 2 Sätzen."
+        fun getSystemPrompt(language: String = "en"): String = when (language) {
+            "de" -> "Du bist Gemma, eine freundliche, hilfsbereite KI im schnellen " +
+                    "Live-Sprachmodus. Antworte ausschließlich auf Deutsch, kurz, prägnant " +
+                    "und direkt in 1 bis 2 Sätzen."
+            else -> "You are Gemma, a friendly, helpful AI in fast " +
+                    "live voice mode. Answer exclusively in English, short, concise " +
+                    "and directly in 1 to 2 sentences."
+        }
         /** Chunker-Paritaet zu E2BAIService: erster Chunk ab 2 Woertern an die TTS für minimale Latenz. */
         private const val FIRST_CHUNK_MIN_WORDS = 2
         /**
@@ -168,6 +172,9 @@ class LocalGemmaAssistant(private val context: Context) {
     var isReady: Boolean = false
         private set
 
+    @Volatile
+    var currentLanguage: String = "en"
+
     /**
      * Gemma 4 E2B MTP GPU Direct Audio Processing (Conversation-API):
      * Nativer Audio-Input über Content.AudioBytes + Content.Text.
@@ -217,11 +224,15 @@ class LocalGemmaAssistant(private val context: Context) {
         e: Engine,
         compactedContext: String = ""
     ): com.google.ai.edge.litertlm.Conversation {
+        val systemPrompt = getSystemPrompt(currentLanguage)
         val instruction = if (compactedContext.isBlank()) {
-            SYSTEM_PROMPT
+            systemPrompt
         } else {
-            "$SYSTEM_PROMPT\n\nZusammenfassung des bisherigen Gesprächs " +
-                "(als Kontext fortführen):\n$compactedContext"
+            val contextLabel = when (currentLanguage) {
+                "de" -> "Zusammenfassung des bisherigen Gesprächs (als Kontext fortführen)"
+                else -> "Summary of the previous conversation (continue as context)"
+            }
+            "$systemPrompt\n\n$contextLabel:\n$compactedContext"
         }
         return e.createConversation(
             ConversationConfig(
@@ -243,12 +254,12 @@ class LocalGemmaAssistant(private val context: Context) {
     ): com.google.ai.edge.litertlm.Conversation {
         val summary = StringBuilder()
         val done = CompletableDeferred<Boolean>()
+        val compactPrompt = when (currentLanguage) {
+            "de" -> "Der Kontext wird gleich erneuert. Fasse den bisherigen Dialog für dich selbst in höchstens 4 kurzen deutschen Sätzen zusammen: wichtige Fakten, offene Fragen, Wünsche und Gesprächsfaden. Keine Einleitung."
+            else -> "The context will be refreshed soon. Summarize the previous conversation yourself in at most 4 short English sentences: important facts, open questions, wishes and conversation thread. No introduction."
+        }
         conv.sendMessageAsync(
-            Contents.of(Content.Text(
-                "Der Kontext wird gleich erneuert. Fasse den bisherigen Dialog für dich " +
-                    "selbst in höchstens 4 kurzen deutschen Sätzen zusammen: wichtige Fakten, " +
-                    "offene Fragen, Wünsche und Gesprächsfaden. Keine Einleitung."
-            )),
+            Contents.of(Content.Text(compactPrompt)),
             object : MessageCallback {
                 override fun onMessage(message: Message) {
                     summary.append(message.toString())
@@ -366,13 +377,17 @@ class LocalGemmaAssistant(private val context: Context) {
                         }
                     }
 
-                    val promptText = if (totalParts == 1) {
-                        "Beantworte ausschließlich den gesprochenen Inhalt der beigefügten " +
-                            "Audioaufnahme auf Deutsch. Wiederhole diese Anweisung nicht."
-                    } else if (!isLastPart) {
-                        "Hier ist Teil ${i + 1} von $totalParts des Audiosignals. Höre aufmerksam zu und warte auf die restlichen Teile vor der finalen Antwort."
-                    } else {
-                        "Hier ist der letzte Teil (${i + 1} von $totalParts) des Audiosignals. Verarbeite alle Teile zusammen mit dem bisherigen Dialog und antworte direkt auf Deutsch in 1 bis 2 Sätzen."
+                    val promptText = when (currentLanguage) {
+                        "de" -> when {
+                            totalParts == 1 -> "Beantworte ausschließlich den gesprochenen Inhalt der beigefügten Audioaufnahme auf Deutsch. Wiederhole diese Anweisung nicht."
+                            !isLastPart -> "Hier ist Teil ${i + 1} von $totalParts des Audiosignals. Höre aufmerksam zu und warte auf die restlichen Teile vor der finalen Antwort."
+                            else -> "Hier ist der letzte Teil (${i + 1} von $totalParts) des Audiosignals. Verarbeite alle Teile zusammen mit dem bisherigen Dialog und antworte direkt auf Deutsch in 1 bis 2 Sätzen."
+                        }
+                        else -> when {
+                            totalParts == 1 -> "Answer exclusively the spoken content of the attached audio recording in English. Do not repeat this instruction."
+                            !isLastPart -> "Here is part ${i + 1} of $totalParts of the audio signal. Listen carefully and wait for the remaining parts before the final answer."
+                            else -> "Here is the last part (${i + 1} of $totalParts) of the audio signal. Process all parts together with the previous conversation and answer directly in English in 1 to 2 sentences."
+                        }
                     }
 
                     conv.sendMessageAsync(
@@ -413,7 +428,10 @@ class LocalGemmaAssistant(private val context: Context) {
                 runCatching { activeConversation?.close() }
                 activeConversation = null
                 wavFiles.forEach { runCatching { it.delete() } }
-                val fallbackPrompt = "Der Gesprächspartner hat gesprochen (${"%.1f".format(audioDurationSec)}s). Antworte freundlich auf Deutsch:"
+                val fallbackPrompt = when (currentLanguage) {
+                    "de" -> "Der Gesprächspartner hat gesprochen (${"%.1f".format(audioDurationSec)}s). Antworte freundlich auf Deutsch:"
+                    else -> "The conversation partner has spoken (${"%.1f".format(audioDurationSec)}s). Respond friendly in English:"
+                }
                 streamChatResponse(fallbackPrompt, onChunk)
             }
         }
@@ -588,16 +606,25 @@ class LocalGemmaAssistant(private val context: Context) {
                     }
                 }
 
-                // Multi-Turn Kontext-Zusammenstellung mit nativem Gemma Chat-Template
+                // Multi-Turn context assembly with native Gemma chat template
+                val systemPrompt = getSystemPrompt(currentLanguage)
                 val promptBuilder = StringBuilder()
                 promptBuilder.append("<start_of_turn>user\n")
-                promptBuilder.append(SYSTEM_PROMPT)
+                promptBuilder.append(systemPrompt)
+                val summaryLabel = when (currentLanguage) {
+                    "de" -> "Bisherige Fakten aus früheren Dialogteilen:"
+                    else -> "Previous facts from earlier conversation parts:"
+                }
                 if (runningSummary.isNotBlank()) {
-                    promptBuilder.append("\n\nBisherige Fakten aus früheren Dialogteilen:\n").append(runningSummary)
+                    promptBuilder.append("\n\n$summaryLabel\n").append(runningSummary)
                 }
                 promptBuilder.append("<end_of_turn>\n")
                 promptBuilder.append("<start_of_turn>model\n")
-                promptBuilder.append("Verstanden. Ich antworte kurz und prägnant auf Deutsch.<end_of_turn>\n")
+                val ackMessage = when (currentLanguage) {
+                    "de" -> "Verstanden. Ich antworte kurz und prägnant auf Deutsch.<end_of_turn>\n"
+                    else -> "Understood. I will answer briefly and concisely in English.<end_of_turn>\n"
+                }
+                promptBuilder.append(ackMessage)
 
                 val recentHistory = conversationHistory.takeLast(MAX_HISTORY_ENTRIES)
                 for (turn in recentHistory) {
@@ -659,7 +686,10 @@ class LocalGemmaAssistant(private val context: Context) {
 
                     reply
                 } else if (ok) {
-                    "Ich habe dich verstanden."
+                    when (currentLanguage) {
+                        "de" -> "Ich habe dich verstanden."
+                        else -> "I understood you."
+                    }
                 } else {
                     ""
                 }
@@ -710,9 +740,13 @@ class LocalGemmaAssistant(private val context: Context) {
 
                 val compPrompt = StringBuilder()
                 compPrompt.append("<start_of_turn>user\n")
-                compPrompt.append("Fasse die wichtigsten Fakten (Name, Ort, Beruf, Kernthemen) aus diesem Dialog in 1 bis 2 kurzen Sätzen zusammen:\n\n")
+                val compactInstruction = when (currentLanguage) {
+                    "de" -> "Fasse die wichtigsten Fakten (Name, Ort, Beruf, Kernthemen) aus diesem Dialog in 1 bis 2 kurzen Sätzen zusammen:"
+                    else -> "Summarize the most important facts (name, place, profession, core topics) from this conversation in 1 to 2 short sentences:"
+                }
+                compPrompt.append(compactInstruction).append("\n\n")
                 for (t in historySnapshot) {
-                    val r = if (t.role == "user") "Nutzer: " else "Gemma: "
+                    val r = if (t.role == "user") "User: " else "Gemma: "
                     compPrompt.append(r).append(t.text).append("\n")
                 }
                 compPrompt.append("<end_of_turn>\n<start_of_turn>model\n")

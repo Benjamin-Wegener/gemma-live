@@ -18,7 +18,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.sisa.app.live"
+        applicationId = "com.example.gemma_live"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

@@ -28,7 +28,7 @@ data class DownloadProgress(
 
 object AppModelManager {
 
-    // Dateinamen (Single Source of Truth, auch vom Onboarding benutzt)
+    // File names (single source of truth, also used by onboarding)
     const val GEMMA_FILE = "gemma-4-E2B-it-gpu.litertlm"
     const val VOICE_MODEL_FILE = "de_DE-kerstin-low.onnx"
     const val VOICE_CONFIG_FILE = "de_DE-kerstin-low.onnx.json"
@@ -38,17 +38,81 @@ object AppModelManager {
 
     const val GEMMA_4_GPU_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-gpu.litertlm"
 
-    // Verifizierte CRC32-Prüfsummen — Pflichtprüfung nach jedem Download / jeder Bundle-Kopie
+    // Piper voice models by language
+    data class VoiceModel(
+        val id: String,
+        val name: String,
+        val modelFile: String,
+        val configFile: String,
+        val tokensFile: String,
+        val downloadUrl: String,
+        val crc32: Long
+    )
+
+    val PIPER_VOICES = listOf(
+        VoiceModel("de_DE-kerstin-low", "Deutsch — Kerstin", "de_DE-kerstin-low.onnx", "de_DE-kerstin-low.onnx.json", "tokens.txt",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/kerstin/low/de_DE-kerstin-low.onnx", 0x4071ce25L),
+        VoiceModel("en_US-amy-medium", "English (US) — Amy", "en_US-amy-medium.onnx", "en_US-amy-medium.onnx.json", "en_US-amy-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx", 0L),
+        VoiceModel("en_GB-alan-medium", "English (UK) — Alan", "en_GB-alan-medium.onnx", "en_GB-alan-medium.onnx.json", "en_GB-alan-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx", 0L),
+        VoiceModel("fr_FR-gilles-medium", "Français — Gilles", "fr_FR-gilles-medium.onnx", "fr_FR-gilles-medium.onnx.json", "fr_FR-gilles-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/gilles/medium/fr_FR-gilles-medium.onnx", 0L),
+        VoiceModel("es_ES-davefx-medium", "Español — Davefx", "es_ES-davefx-medium.onnx", "es_ES-davefx-medium.onnx.json", "es_ES-davefx-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/davefx/medium/es_ES-davefx-medium.onnx", 0L),
+        VoiceModel("it_IT-paola-medium", "Italiano — Paola", "it_IT-paola-medium.onnx", "it_IT-paola-medium.onnx.json", "it_IT-paola-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/paola/medium/it_IT-paola-medium.onnx", 0L),
+        VoiceModel("nl_NL-nathalie-medium", "Nederlands — Nathalie", "nl_NL-nathalie-medium.onnx", "nl_NL-nathalie-medium.onnx.json", "nl_NL-nathalie-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/nl/nl_NL/nathalie/medium/nl_NL-nathalie-medium.onnx", 0L),
+        VoiceModel("ru_RU-denis-medium", "Русский — Денис", "ru_RU-denis-medium.onnx", "ru_RU-denis-medium.onnx.json", "ru_RU-denis-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/denis/medium/ru_RU-denis-medium.onnx", 0L),
+        VoiceModel("ja_JP-misaki-medium", "日本語 — 美咲", "ja_JP-misaki-medium.onnx", "ja_JP-misaki-medium.onnx.json", "ja_JP-misaki-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ja/ja_JP/misaki/medium/ja_JP-misaki-medium.onnx", 0L),
+        VoiceModel("zh_CN-huayan-medium", "中文 — 华燕", "zh_CN-huayan-medium.onnx", "zh_CN-huayan-medium.onnx.json", "zh_CN-huayan-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/zh/zh_CN/huayan/medium/zh_CN-huayan-medium.onnx", 0L),
+        VoiceModel("pt_BR-edresson-medium", "Português — Edresson", "pt_BR-edresson-medium.onnx", "pt_BR-edresson-medium.onnx.json", "pt_BR-edresson-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/edresson/medium/pt_BR-edresson-medium.onnx", 0L),
+        VoiceModel("pl_PL-darkman-medium", "Polski — Darkman", "pl_PL-darkman-medium.onnx", "pl_PL-darkman-medium.onnx.json", "pl_PL-darkman-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/pl/pl_PL/darkman/medium/pl_PL-darkman-medium.onnx", 0L),
+        VoiceModel("sv_SE-nst-medium", "Svenska — Nst", "sv_SE-nst-medium.onnx", "sv_SE-nst-medium.onnx.json", "sv_SE-nst-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/sv/sv_SE/nst/medium/sv_SE-nst-medium.onnx", 0L),
+        VoiceModel("tr_TR-fahrettin-medium", "Türkçe — Fahrettin", "tr_TR-fahrettin-medium.onnx", "tr_TR-fahrettin-medium.onnx.json", "tr_TR-fahrettin-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium.onnx", 0L),
+        VoiceModel("cs_CZ-jirka-medium", "Čeština — Jirka", "cs_CZ-jirka-medium.onnx", "cs_CZ-jirka-medium.onnx.json", "cs_CZ-jirka-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/cs/cs_CZ/jirka/medium/cs_CZ-jirka-medium.onnx", 0L),
+        VoiceModel("ar_JO-kareem-medium", "العربية — كريم", "ar_JO-kareem-medium.onnx", "ar_JO-kareem-medium.onnx.json", "ar_JO-kareem-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx", 0L),
+        VoiceModel("ko_KR-kss-medium", "한국어 — Kss", "ko_KR-kss-medium.onnx", "ko_KR-kss-medium.onnx.json", "ko_KR-kss-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ko/ko_KR/kss/medium/ko_KR-kss-medium.onnx", 0L),
+        VoiceModel("vi_VN-25hours-medium", "Tiếng Việt — 25hours", "vi_VN-25hours-medium.onnx", "vi_VN-25hours-medium.onnx.json", "vi_VN-25hours-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/25hours/medium/vi_VN-25hours-medium.onnx", 0L),
+        VoiceModel("uk_UA-mykyta-medium", "Українська — Микита", "uk_UA-mykyta-medium.onnx", "uk_UA-mykyta-medium.onnx.json", "uk_UA-mykyta-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/uk/uk_UA/mykyta/medium/uk_UA-mykyta-medium.onnx", 0L),
+        VoiceModel("ca_ES-ona-medium", "Català — Ona", "ca_ES-ona-medium.onnx", "ca_ES-ona-medium.onnx.json", "ca_ES-ona-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ca/ca_ES/ona/medium/ca_ES-ona-medium.onnx", 0L),
+        VoiceModel("el_GR-rapunzelina-medium", "Ελληνικά — Rapunzelina", "el_GR-rapunzelina-medium.onnx", "el_GR-rapunzelina-medium.onnx.json", "el_GR-rapunzelina-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/el/el_GR/rapunzelina/medium/el_GR-rapunzelina-medium.onnx", 0L),
+        VoiceModel("fi_FI-harri-medium", "Suomi — Harri", "fi_FI-harri-medium.onnx", "fi_FI-harri-medium.onnx.json", "fi_FI-harri-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/fi/fi_FI/harri/medium/fi_FI-harri-medium.onnx", 0L),
+        VoiceModel("hu_HU-anna-medium", "Magyar — Anna", "hu_HU-anna-medium.onnx", "hu_HU-anna-medium.onnx.json", "hu_HU-anna-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/hu/hu_HU/anna/medium/hu_HU-anna-medium.onnx", 0L),
+        VoiceModel("da_DK-naja-medium", "Dansk — Naja", "da_DK-naja-medium.onnx", "da_DK-naja-medium.onnx.json", "da_DK-naja-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/da/da_DK/naja/medium/da_DK-naja-medium.onnx", 0L),
+        VoiceModel("hi_IN-naman-medium", "हिन्दी — नमन", "hi_IN-naman-medium.onnx", "hi_IN-naman-medium.onnx.json", "hi_IN-naman-medium.onnx.json",
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/naman/medium/hi_IN-naman-medium.onnx", 0L)
+    )
+
+    // Verified CRC32 checksums — mandatory check after every download / bundle copy
     const val VOICE_CONFIG_CRC: Long = 0x8aba0c34L
-    const val VOICE_MODEL_CRC: Long = 0x4071ce25L // rhasspy kerstin-low + sherpa-Metadaten
-    const val VOICE_TOKENS_CRC: Long = 0xbd891de3L // aus kerstin phoneme_id_map (130 Symbole)
+    const val VOICE_MODEL_CRC: Long = 0x4071ce25L // rhasspy kerstin-low + sherpa metadata
+    const val VOICE_TOKENS_CRC: Long = 0xbd891de3L // from kerstin phoneme_id_map (130 symbols)
     const val GEMMA_4_GPU_CRC: Long = 0x0f55d747L
 
     /**
-     * Primärspeicher (Scoped Storage): app-privates ExternalFilesDir/models.
-     * - Kein Permission-Request nötig, auf allen API-Levels schreibbar
-     * - Direkter File-Pfad für LiteRT-Inferenz (mmap / Random Access)
-     * MediaStore-URIs allein reichen für die Inference-Engine nicht.
+     * Primary storage (scoped storage): app-private ExternalFilesDir/models.
+     * - No permission request needed, writable on all API levels
+     * - Direct file path for LiteRT inference (mmap / random access)
+     * MediaStore URIs alone are not sufficient for the inference engine.
      */
     fun getModelsDir(context: Context): File {
         val dir = File(context.getExternalFilesDir("models") ?: File(context.filesDir, "models"), ".")
@@ -67,9 +131,9 @@ object AppModelManager {
     }
 
     /**
-     * Installationscheck: erst privat (inferenzrelevant), dann öffentlich
-     * (MediaStore Downloads/SIS_Models, für den Nutzer sichtbar).
-     * Zusätzlich Migration aus dem alten Legacy-Pfad.
+     * Installation check: first private (inference-relevant), then public
+     * (MediaStore Downloads/SIS_Models, visible to the user).
+     * Additionally migration from the old legacy path.
      */
     fun isModelInstalled(context: Context, filename: String): Boolean {
         val private = getModelFile(context, filename)
@@ -84,9 +148,9 @@ object AppModelManager {
 
 
     /**
-     * Für die Inferenz zählt nur der private App-Speicher (direkter Datei-
-     * Zugriff). Öffentliche Kopien in Downloads sind nur Sichtbarkeit.
-     * Gating (Onboarding-Weiter) nutzt ausschließlich diese Prüfung.
+     * For inference, only the private app storage counts (direct file
+     * access). Public copies in Downloads are just for visibility.
+     * Gating (onboarding continue) uses exclusively this check.
      */
     fun isPrivateModelInstalled(context: Context, filename: String): Boolean {
         return try {
@@ -98,10 +162,10 @@ object AppModelManager {
     }
 
     /**
-     * Sisa-Stimme (Kerstin, weiblich) liegt in der APK (assets/models) — NUR Gemma wird gesaugt.
-     * Kopiert ONNX + JSON beim ersten Start in den App-Speicher und prüft CRC.
-     * Auf IO-Thread aufrufen (63 MB Kopie). Gibt true zurück, wenn beide
-     * Dateien CRC-geprüft vorliegen.
+     * Sisa voice (Kerstin, female) is in the APK (assets/models) — ONLY Gemma is downloaded.
+     * Copies ONNX + JSON to app storage on first start and checks CRC.
+     * Call on IO thread (63 MB copy). Returns true if both
+     * files are present with verified CRC.
      */
     fun ensureVoiceFromBundle(context: Context): Boolean {
         var ok = copyAssetIfNeeded(context, "models/$VOICE_MODEL_FILE", VOICE_MODEL_FILE, VOICE_MODEL_CRC)
@@ -114,7 +178,7 @@ object AppModelManager {
         return ok
     }
 
-    /** Kopiert ein Asset-Verzeichnis (espeak-ng-data, 355 Dateien) beim 1. Start. */
+    /** Copies an asset directory (espeak-ng-data, 355 files) on first start. */
     private fun copyAssetDirIfNeeded(context: Context, assetDir: String): Boolean {
         return try {
             val destDir = File(getModelsDir(context), assetDir)
@@ -167,7 +231,7 @@ object AppModelManager {
 
     // ------------------------------------------------- MediaStore (scoped) ---
 
-    /** Prüft per MediaStore, ob eine sichtbare Kopie in Downloads/SIS_Models liegt. */
+    /** Checks via MediaStore if a visible copy exists in Downloads/SIS_Models. */
     fun isPublicCopyPresent(context: Context, filename: String): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             @Suppress("DEPRECATION")
@@ -192,9 +256,9 @@ object AppModelManager {
     }
 
     /**
-     * Veröffentlicht eine Kopie der verifizierten Datei in Downloads/SIS_Models
-     * über MediaStore (Scoped Storage, API 29+). Best effort: Fehler sind
-     * nicht fatal, da die private Datei für die Inference ausreicht.
+     * Publishes a copy of the verified file to Downloads/SIS_Models
+     * via MediaStore (scoped storage, API 29+). Best effort: errors are
+     * not fatal since the private file is sufficient for inference.
      */
     fun publishToPublicDownloads(context: Context, filename: String): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
@@ -233,7 +297,7 @@ object AppModelManager {
         }
     }
 
-    /** Einmalige Migration aus dem alten Legacy-Pfad in den Scoped-Storage-Speicher. */
+    /** One-time migration from the old legacy path to scoped storage. */
     private fun migrateLegacyIfPresent(context: Context, filename: String): File? {
         return try {
             @Suppress("DEPRECATION")
@@ -275,18 +339,18 @@ object AppModelManager {
     }
 
     /**
-     * Übernimmt eine bereits auf dem Gerät liegende Kopie aus
-     * Downloads/SIS_Models (z.B. per USB eingespielt oder von einer älteren
-     * App-Version) per MediaStore-Stream in den App-Speicher — ohne einen
-     * einzigen Netzwerk-Byte. Mit Fortschritt + CRC-Pflichtprüfung.
-     * @return Zieldatei bei Erfolg, sonst null (dann normal downloaden).
+     * Imports an existing copy from
+     * Downloads/SIS_Models (e.g. pushed via USB or from an older
+     * app version) via MediaStore stream into app storage — without a
+     * single network byte. With progress + CRC mandatory check.
+     * @return Target file on success, null otherwise (then download normally).
      */
     /**
-     * Oeffentlicher Einstieg fuer den USB-Import (Vorgabe HANDOFF/Roadmap):
-     * adb push nach /sdcard/Download/SIS_Models + In-App-Import in den
-     * privaten App-Speicher mit CRC-Pflichtpruefung. Wird von
-     * LocalGemmaAssistant.ensureModel() aufgerufen, BEVOR ein Netzwerk-
-     * Download angefasst wird — kein Re-Download bei 1,87 GB.
+     * Public entry point for USB import (spec HANDOFF/Roadmap):
+     * adb push to /sdcard/Download/SIS_Models + in-app import to
+     * private app storage with CRC mandatory check. Called by
+     * LocalGemmaAssistant.ensureModel() BEFORE a network
+     * download is started — no re-download for 1.87 GB.
      */
     suspend fun importFromPublicDownloads(
         context: Context,
@@ -370,9 +434,9 @@ object AppModelManager {
     }
 
     /**
-     * Download mit Resume (HTTP Range) und CRC32-PFLICHTPRÜFUNG.
-     * expectedCrc32 darf nicht null sein: ohne Prüfsumme wird kein
-     * Modell als gültig akzeptiert (fail-closed).
+     * Download with resume (HTTP Range) and CRC32 mandatory check.
+     * expectedCrc32 must not be null: without checksum no
+     * model is accepted as valid (fail-closed).
      */
     fun downloadModel(
         context: Context,
@@ -380,28 +444,28 @@ object AppModelManager {
         targetFileName: String,
         expectedCrc32: Long? = null
     ): Flow<DownloadProgress> = flow {
-        requireNotNull(expectedCrc32) { "CRC32-Prüfsumme ist Pflicht (fail-closed)" }
+        requireNotNull(expectedCrc32) { "CRC32 checksum is mandatory (fail-closed)" }
 
         val targetDir = getModelsDir(context)
         val targetFile = File(targetDir, targetFileName)
         val tempFile = File(targetDir, "$targetFileName.download")
 
-        // Bereits gültige Datei -> sofort fertig melden (CRC verifiziert)
+        // Already valid file -> report ready immediately (CRC verified)
         if (targetFile.exists() && !tempFile.exists()) {
             if (calculateCrc32(targetFile) == expectedCrc32) {
                 publishToPublicDownloads(context, targetFileName)
                 emit(DownloadProgress(targetFileName, targetFile.length(), targetFile.length(), true))
                 return@flow
             } else {
-                // Korrupt -> als Resume-Basis weiterführen
+                // Corrupt -> continue as resume base
                 targetFile.renameTo(tempFile)
             }
         }
 
-        // Datei liegt schon in Downloads (USB, alte Version, andere App-Identität)?
-        // Immer zuerst per MediaStore-Import übernehmen statt neu zu laden —
-        // eine fertige lokale Datei schlägt jedes Resume. Bei Erfolg alten
-        // Teil-Download verwerfen.
+        // File already in Downloads (USB, old version, other app identity)?
+        // Always import via MediaStore first instead of re-downloading —
+        // a complete local file beats any resume. On success discard old
+        // partial download.
         val imported = tryImportFromPublicDownloads(context, targetFileName, expectedCrc32) { copied, total ->
             emit(DownloadProgress(targetFileName, copied, total, false))
         }
@@ -439,7 +503,7 @@ object AppModelManager {
             val totalBytes = if (isPartial) existingBytes + contentLength else contentLength
 
             val append = isPartial && existingBytes > 0
-            // Falls Server kein Resume unterstützt, von vorn beginnen
+            // If server doesn't support resume, start from beginning
             if (!append && tempFile.exists()) tempFile.delete()
 
             connection.inputStream.use { input ->
@@ -465,20 +529,20 @@ object AppModelManager {
                 }
             }
 
-            // CRC32-PFLICHTPRÜFUNG vor dem finalen Umbenennen (fail-closed)
+            // CRC32 mandatory check before final rename (fail-closed)
             val actualCrc = withContext(Dispatchers.IO) { calculateCrc32(tempFile) }
             if (actualCrc != expectedCrc32) {
                 tempFile.delete()
                 emit(
                     DownloadProgress(
                         targetFileName, 0, 0, false,
-                        "CRC-Prüfung fehlgeschlagen: erwartet 0x${expectedCrc32.toString(16)}, erhalten 0x${actualCrc.toString(16)} — Datei verworfen"
+                        "CRC check failed: expected 0x${expectedCrc32.toString(16)}, got 0x${actualCrc.toString(16)} — file discarded"
                     )
                 )
                 return@flow
             }
 
-            // Atomar umbenennen
+            // Atomic rename
             val renamed = tempFile.renameTo(targetFile)
             if (!renamed) {
                 try {
@@ -490,23 +554,23 @@ object AppModelManager {
                 }
             }
 
-            // Sichtbare Kopie in Downloads/SIS_Models (best effort)
+            // Visible copy in Downloads/SIS_Models (best effort)
             publishToPublicDownloads(context, targetFileName)
 
             emit(DownloadProgress(targetFileName, targetFile.length(), targetFile.length(), true))
         } catch (e: Exception) {
             val downloadedSoFar = if (tempFile.exists()) tempFile.length() else existingBytes
-            emit(DownloadProgress(targetFileName, downloadedSoFar, 0, false, e.localizedMessage ?: "Verbindung unterbrochen (Resume bereit)"))
+            emit(DownloadProgress(targetFileName, downloadedSoFar, 0, false, e.localizedMessage ?: "Connection interrupted (resume ready)"))
         } finally {
             connection?.disconnect()
         }
     }.flowOn(Dispatchers.IO)
 
     /**
-     * Import per Dateiauswahl (Storage Access Framework): Der Nutzer wählt die
-     * Modelldatei selbst (z.B. per USB eingespielt, von alter App-Identität —
-     * für die neue App per MediaStore nicht lesbar). Mit Fortschritt +
-     * CRC-Pflichtprüfung. Kein Netzwerk.
+     * Import via file picker (Storage Access Framework): the user selects the
+     * model file themselves (e.g. pushed via USB, from old app identity —
+     * not readable via MediaStore for the new app). With progress +
+     * CRC mandatory check. No network.
      */
     fun importFromUri(
         context: Context,
@@ -514,7 +578,7 @@ object AppModelManager {
         targetFileName: String,
         expectedCrc32: Long? = null
     ): Flow<DownloadProgress> = flow {
-        requireNotNull(expectedCrc32) { "CRC32-Prüfsumme ist Pflicht (fail-closed)" }
+        requireNotNull(expectedCrc32) { "CRC32 checksum is mandatory (fail-closed)" }
 
         val targetDir = getModelsDir(context)
         val targetFile = File(targetDir, targetFileName)
@@ -534,7 +598,7 @@ object AppModelManager {
         try {
             val input = context.contentResolver.openInputStream(uri)
             if (input == null) {
-                emit(DownloadProgress(targetFileName, 0, 0, false, "Datei kann nicht geöffnet werden"))
+                emit(DownloadProgress(targetFileName, 0, 0, false, "File cannot be opened"))
                 return@flow
             }
             input.use { `in` ->
@@ -561,7 +625,7 @@ object AppModelManager {
                 emit(
                     DownloadProgress(
                         targetFileName, 0, 0, false,
-                        "CRC-Prüfung fehlgeschlagen: Datei passt nicht (erwartet 0x${expectedCrc32.toString(16)}, erhalten 0x${actualCrc.toString(16)})"
+                        "CRC check failed: file does not match (expected 0x${expectedCrc32.toString(16)}, got 0x${actualCrc.toString(16)})"
                     )
                 )
                 return@flow
@@ -575,7 +639,7 @@ object AppModelManager {
             emit(DownloadProgress(targetFileName, targetFile.length(), targetFile.length(), true))
         } catch (e: Exception) {
             try { tmp.delete() } catch (_: Exception) {}
-            emit(DownloadProgress(targetFileName, 0, 0, false, e.localizedMessage ?: "Import abgebrochen"))
+            emit(DownloadProgress(targetFileName, 0, 0, false, e.localizedMessage ?: "Import aborted"))
         }
     }.flowOn(Dispatchers.IO)
 }
