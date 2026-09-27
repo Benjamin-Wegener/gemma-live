@@ -707,54 +707,64 @@ class MainActivity : ComponentActivity() {
                                             .asShortBuffer().get(shorts)
                                         shorts
                                     }
-                                    scope.launch(Dispatchers.Main) {
-                                        val busy = liveState.value == LiveState.SPEAKING ||
-                                            liveState.value == LiveState.THINKING
-                                        if (!busy && !externalMicMode) {
-                                            sttManager?.stopListening()
-                                            val samplesToUse = if (sileroSamples != null && sileroSamples.isNotEmpty()) {
-                                                sileroSamples
-                                            } else if (pcmData.size >= 16000 * 0.25) {
-                                                FloatArray(pcmData.size) { i -> pcmData[i] / 32768.0f }
-                                            } else null
-                                            if (samplesToUse != null && samplesToUse.isNotEmpty()) {
-                                                Log.i("LiveMode", "Gemma E2B MTP GPU Direct Audio Processing (${samplesToUse.size} samples)")
-                                                currentTranscript.value = "Gemma E2B Audio-Eingabe (${"%.1f".format(samplesToUse.size / 16000.0)}s)..."
-                                                liveState.value = LiveState.THINKING
-                                                scope.launch(Dispatchers.Default) {
-                                                    speechMutex.lock()
-                                                    try {
-                                                        val onChunkReceived: (String) -> Unit = { chunk ->
-                                                            // Die Modell-Chunks treffen zwar geordnet ein, ihre
-                                                            // asynchronen Piper-Generierungen aber nicht. Eine
-                                                            // separate speak()-Anfrage pro Chunk konnte daher den
-                                                            // Satzschluss vor den Satzanfang schieben. Während des
-                                                            // Streamings aktualisieren wir nur die Anzeige; gesprochen
-                                                            // wird anschließend genau eine vollständige Antwort.
-                                                            scope.launch(Dispatchers.Main) {
-                                                                lastAiResponse.value =
-                                                                    "${lastAiResponse.value} $chunk".trim()
-                                                            }
-                                                        }
-                                                        val resp = localGemma.processAudioDirectly(samplesToUse, onChunkReceived)
-                                                        if (resp.isNotBlank()) {
-                                                            withContext(Dispatchers.Main) {
-                                                                lastAiResponse.value = resp
-                                                                liveState.value = LiveState.SPEAKING
-                                                                aiSpeakStartNs = SystemClock.elapsedRealtimeNanos()
-                                                                sisaVoice.speak(resp) {
-                                                                    if (isHandsFreeActive.value) {
-                                                                        liveState.value = LiveState.LISTENING
-                                                                    } else {
-                                                                        liveState.value = LiveState.IDLE
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    } finally {
-                                                        speechMutex.unlock()
+                                    val samplesToUse = if (sileroSamples != null && sileroSamples.isNotEmpty()) {
+                                        sileroSamples
+                                    } else if (pcmData.size >= 16000 * 0.25) {
+                                        FloatArray(pcmData.size) { i -> pcmData[i] / 32768.0f }
+                                    } else null
+                                    if (externalMicMode) {
+                                        Log.i("LiveMode", "VAD turn ignored: external microphone supplies ACTION_USER_INPUT")
+                                    } else if (samplesToUse == null || samplesToUse.isEmpty()) {
+                                        Log.w("LiveMode", "VAD turn ignored: no usable audio samples")
+                                    } else {
+                                        // Do not queue this hand-off on Dispatchers.Main: a busy UI must never
+                                        // make a completed VAD turn disappear without inference or a log entry.
+                                        Log.i("LiveMode", "Direct audio turn queued (${samplesToUse.size} samples)")
+                                        scope.launch(Dispatchers.Default) {
+                                            speechMutex.lock()
+                                            try {
+                                                val canStart = withContext(Dispatchers.Main) {
+                                                    val busy = liveState.value == LiveState.SPEAKING ||
+                                                        liveState.value == LiveState.THINKING
+                                                    if (!busy) {
+                                                        currentTranscript.value = "Gemma E2B audio input (${"%.1f".format(samplesToUse.size / 16000.0)}s)…"
+                                                        liveState.value = LiveState.THINKING
+                                                    }
+                                                    !busy
+                                                }
+                                                if (!canStart) {
+                                                    Log.w("LiveMode", "VAD turn skipped: another turn is already active")
+                                                    return@launch
+                                                }
+                                                Log.i("LiveMode", "Gemma E2B Direct Audio Processing started (${samplesToUse.size} samples)")
+                                                val onChunkReceived: (String) -> Unit = { chunk ->
+                                                    scope.launch(Dispatchers.Main) {
+                                                        lastAiResponse.value = "${lastAiResponse.value} $chunk".trim()
                                                     }
                                                 }
+                                                val resp = localGemma.processAudioDirectly(samplesToUse, onChunkReceived)
+                                                withContext(Dispatchers.Main) {
+                                                    if (resp.isBlank()) {
+                                                        Log.w("LiveMode", "Gemma returned an empty direct-audio response")
+                                                        liveState.value = LiveState.IDLE
+                                                    } else {
+                                                        lastAiResponse.value = resp
+                                                        liveState.value = LiveState.SPEAKING
+                                                        aiSpeakStartNs = SystemClock.elapsedRealtimeNanos()
+                                                        sisaVoice.speak(resp) {
+                                                            if (isHandsFreeActive.value) {
+                                                                liveState.value = LiveState.LISTENING
+                                                            } else {
+                                                                liveState.value = LiveState.IDLE
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } catch (t: Throwable) {
+                                                Log.e("LiveMode", "Direct audio turn failed", t)
+                                                withContext(Dispatchers.Main) { liveState.value = LiveState.IDLE }
+                                            } finally {
+                                                speechMutex.unlock()
                                             }
                                         }
                                     }
