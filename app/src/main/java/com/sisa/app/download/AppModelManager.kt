@@ -138,7 +138,7 @@ object AppModelManager {
 
     /**
      * Installation check: first private (inference-relevant), then public
-     * (MediaStore Downloads/SIS_Models, visible to the user).
+     * (MediaStore Downloads/models, visible to the user).
      * Additionally migration from the old legacy path.
      */
     fun isModelInstalled(context: Context, filename: String): Boolean {
@@ -237,7 +237,7 @@ object AppModelManager {
 
     // ------------------------------------------------- MediaStore (scoped) ---
 
-    /** Checks via MediaStore if a visible copy exists in Downloads/SIS_Models. */
+    /** Checks via MediaStore if a visible copy exists in Downloads/models. */
     fun isPublicCopyPresent(context: Context, filename: String): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             @Suppress("DEPRECATION")
@@ -262,7 +262,7 @@ object AppModelManager {
     }
 
     /**
-     * Publishes a copy of the verified file to Downloads/SIS_Models
+     * Publishes a copy of the verified file to Downloads/models
      * via MediaStore (scoped storage, API 29+). Best effort: errors are
      * not fatal since the private file is sufficient for inference.
      */
@@ -276,7 +276,7 @@ object AppModelManager {
             val dotIdx = filename.lastIndexOf('.')
             val base = if (dotIdx > 0) filename.substring(0, dotIdx) else filename
             val sel = "(${MediaStore.Downloads.DISPLAY_NAME}=? OR ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?) AND ${MediaStore.Downloads.RELATIVE_PATH} LIKE ?"
-            val args = arrayOf(filename, "$base (%", "%SIS_Models%")
+            val args = arrayOf(filename, "$base (%", "%${publicDownloadFolder(filename).removePrefix("Download/")}%")
             context.contentResolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Downloads._ID), sel, args, null)?.use { c ->
                 val idIdx = c.getColumnIndexOrThrow(MediaStore.Downloads._ID)
                 while (c.moveToNext()) {
@@ -358,14 +358,14 @@ object AppModelManager {
 
     /**
      * Imports an existing copy from
-     * Downloads/SIS_Models (e.g. pushed via USB or from an older
+     * Downloads/models (e.g. pushed via USB or from an older
      * app version) via MediaStore stream into app storage — without a
      * single network byte. With progress + CRC mandatory check.
      * @return Target file on success, null otherwise (then download normally).
      */
     /**
      * Public entry point for USB import (spec HANDOFF/Roadmap):
-     * adb push to /sdcard/Download/SIS_Models + in-app import to
+     * adb push to /sdcard/Download/models + in-app import to
      * private app storage with CRC mandatory check. Called by
      * LocalGemmaAssistant.ensureModel() BEFORE a network
      * download is started — no re-download for 1.87 GB.
@@ -413,6 +413,7 @@ object AppModelManager {
                     }
                 }
             }
+            android.util.Log.i("AppModelManager", "Downloads import: ${candidates.size} candidate(s) for $filename")
             val targetDir = getModelsDir(context)
             for ((uri, size) in candidates) {
                 val tmp = File(targetDir, "$filename.import")
@@ -445,9 +446,11 @@ object AppModelManager {
                         }
                         return@withContext dest
                     } else {
+                        android.util.Log.w("AppModelManager", "Downloads import checksum mismatch for $filename")
                         tmp.delete() // CRC fail -> Kandidat verwerfen, nächsten prüfen
                     }
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    android.util.Log.w("AppModelManager", "Downloads import cannot read $filename", e)
                     try { tmp.delete() } catch (_: Exception) {}
                 }
             }
@@ -583,7 +586,7 @@ object AppModelManager {
                 }
             }
 
-            // Visible copy in Downloads/SIS_Models (best effort)
+            // Visible copy in Downloads/models (best effort)
             publishToPublicDownloads(context, targetFileName)
 
             emit(DownloadProgress(targetFileName, targetFile.length(), targetFile.length(), true))
