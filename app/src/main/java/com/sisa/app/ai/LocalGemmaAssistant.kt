@@ -173,7 +173,8 @@ class LocalGemmaAssistant(private val context: Context) {
         private set
 
     @Volatile
-    var currentLanguage: String = "en"
+    /** Default must match the bundled default voice (de_DE-kerstin-low). */
+    var currentLanguage: String = "de"
 
     /**
      * Gemma 4 E2B MTP GPU Direct Audio Processing (Conversation-API):

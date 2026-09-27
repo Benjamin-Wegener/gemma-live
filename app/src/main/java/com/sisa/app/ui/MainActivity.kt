@@ -192,6 +192,11 @@ class MainActivity : ComponentActivity() {
         )
 
         localGemma = LocalGemmaAssistant(this)
+        val voicePrefs = getPreferences(MODE_PRIVATE)
+        val savedVoiceId = voicePrefs.getString("selected_voice_id", "de_DE-kerstin-low")
+            ?: "de_DE-kerstin-low"
+        selectedVoiceId.value = savedVoiceId
+        localGemma.currentLanguage = if (savedVoiceId.startsWith("de_")) "de" else "en"
         liveState.value = LiveState.LOADING
         isHandsFreeActive.value = false
         engineStatus.value = "Loading engine …"
@@ -306,7 +311,8 @@ class MainActivity : ComponentActivity() {
                         TextButton(onClick = {
                             selectedVoiceState.value = selectedId
                             voiceSelectorState.value = false
-                            prefs.edit().putBoolean("voice_selected", true).apply()
+                            prefs.edit().putBoolean("voice_selected", true)
+                                .putString("selected_voice_id", selectedId).apply()
                             // Set language based on voice selection
                             val lang = if (selectedId.startsWith("de_")) "de" else "en"
                             localGemma.currentLanguage = lang
