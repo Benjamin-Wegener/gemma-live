@@ -131,6 +131,16 @@ def transcribe_gemma_audio(wav_path):
     except Exception as exc:
         return {"text": None, "engine": "sherpa-onnx-whisper-tiny", "error": str(exc)}
 
+def inspect_recording(wav_path):
+    if not wav_path or not Path(wav_path).exists():
+        return {"saved": False, "duration_ms": 0, "bytes": 0}
+    try:
+        with wave.open(wav_path, "rb") as wav:
+            duration_ms = round(wav.getnframes() * 1000 / wav.getframerate())
+        return {"saved": True, "duration_ms": duration_ms, "bytes": Path(wav_path).stat().st_size}
+    except wave.Error:
+        return {"saved": False, "duration_ms": 0, "bytes": Path(wav_path).stat().st_size}
+
 class QwenAgent:
     def __init__(self, base_url: str):
         self.base_url = base_url
@@ -259,6 +269,9 @@ def write_report(report):
         print(f"    erkannt: {turn['pixel']['recognized_text'] or '—'}")
         print(f"    Gemma (Log):     {turn['pixel']['gemma_reply'] or '—'}")
         heard = turn["gemma_audio"]
+        recording = heard["recording"]
+        print(f"    Aufnahme: {Path(heard['wav']).name if heard['wav'] else '—'} "
+              f"({recording['duration_ms']} ms, {recording['bytes']} Bytes)")
         print(f"    Gemma (gehört):  {heard['whisper']['text'] or '—'}")
         if heard["whisper"]["error"]:
             print(f"    Whisper-Fehler:  {heard['whisper']['error']}")
@@ -310,8 +323,11 @@ def main():
         # Ein kleiner Nachlauf hält das physische Satzende in der WAV-Datei fest.
         time.sleep(0.5)
         recorded_wav = capture.stop()
+        recording = inspect_recording(recorded_wav)
         heard = transcribe_gemma_audio(recorded_wav)
-        gemma_audio = {"wav": recorded_wav, "whisper": heard}
+        gemma_audio = {"wav": recorded_wav, "recording": recording, "whisper": heard}
+        print(f"   💾 Mac-Mikrofonaufnahme: {recorded_wav or 'FEHLER'} "
+              f"({recording['duration_ms']} ms, {recording['bytes']} Bytes)")
         print(f"   🎙️ Gemma am Mac gehört (Whisper): \"{heard['text'] or '—'}\"")
         if heard["error"]:
             print(f"   ⚠️ Mac-Whisper konnte die Aufnahme nicht auswerten: {heard['error']}")
