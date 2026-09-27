@@ -575,37 +575,32 @@ class MainActivity : ComponentActivity() {
                                                 scope.launch(Dispatchers.Default) {
                                                     speechMutex.lock()
                                                     try {
-                                                        var firstChunk = true
                                                         val onChunkReceived: (String) -> Unit = { chunk ->
+                                                            // Die Modell-Chunks treffen zwar geordnet ein, ihre
+                                                            // asynchronen Piper-Generierungen aber nicht. Eine
+                                                            // separate speak()-Anfrage pro Chunk konnte daher den
+                                                            // Satzschluss vor den Satzanfang schieben. Während des
+                                                            // Streamings aktualisieren wir nur die Anzeige; gesprochen
+                                                            // wird anschließend genau eine vollständige Antwort.
                                                             scope.launch(Dispatchers.Main) {
-                                                                if (firstChunk) {
-                                                                    firstChunk = false
-                                                                    liveState.value = LiveState.SPEAKING
-                                                                    lastAiResponse.value = chunk
-                                                                    aiSpeakStartNs = SystemClock.elapsedRealtimeNanos()
-                                                                    sisaVoice.speak(chunk) {
-                                                                        if (isHandsFreeActive.value) {
-                                                                            liveState.value = LiveState.LISTENING
-                                                                        } else {
-                                                                            liveState.value = LiveState.IDLE
-                                                                        }
-                                                                    }
-                                                                } else {
-                                                                    lastAiResponse.value = "${lastAiResponse.value} $chunk"
-                                                                    aiSpeakStartNs = SystemClock.elapsedRealtimeNanos()
-                                                                    sisaVoice.speak(chunk) {
-                                                                        if (isHandsFreeActive.value) {
-                                                                            liveState.value = LiveState.LISTENING
-                                                                        } else {
-                                                                            liveState.value = LiveState.IDLE
-                                                                        }
-                                                                    }
-                                                                }
+                                                                lastAiResponse.value =
+                                                                    "${lastAiResponse.value} $chunk".trim()
                                                             }
                                                         }
                                                         val resp = localGemma.processAudioDirectly(samplesToUse, onChunkReceived)
                                                         if (resp.isNotBlank()) {
-                                                            withContext(Dispatchers.Main) { lastAiResponse.value = resp }
+                                                            withContext(Dispatchers.Main) {
+                                                                lastAiResponse.value = resp
+                                                                liveState.value = LiveState.SPEAKING
+                                                                aiSpeakStartNs = SystemClock.elapsedRealtimeNanos()
+                                                                sisaVoice.speak(resp) {
+                                                                    if (isHandsFreeActive.value) {
+                                                                        liveState.value = LiveState.LISTENING
+                                                                    } else {
+                                                                        liveState.value = LiveState.IDLE
+                                                                    }
+                                                                }
+                                                            }
                                                         }
                                                     } finally {
                                                         speechMutex.unlock()
