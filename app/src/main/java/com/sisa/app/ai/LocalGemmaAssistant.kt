@@ -170,7 +170,7 @@ class LocalGemmaAssistant(private val context: Context) {
 
     /**
      * Gemma 4 E2B MTP GPU Direct Audio Processing (Conversation-API):
-     * Nativer Audio-Input über Content.AudioFile + Content.Text.
+     * Nativer Audio-Input über Content.AudioBytes + Content.Text.
      * Der E2B-Audio-Encoder wird über einen vollständigen 16-kHz WAV-Container gespeist.
      * Die Conversation-API dekodiert den Blob mit miniaudio; rohe PCM-Bytes sind kein
      * gültiger Eingabestream für diesen Decoder.
@@ -274,7 +274,7 @@ class LocalGemmaAssistant(private val context: Context) {
 
     /**
      * Gemma 4 E2B MTP GPU Direct Audio Processing (Conversation-API):
-     * Nativer Audio-Input über Content.AudioFile + Content.Text (16-kHz WAV).
+     * Nativer Audio-Input über Content.AudioBytes + Content.Text (16-kHz WAV).
      * Handhabt Aufnahmen >30s durch Stückelung in <=30s Abschnitte (480000 Samples).
      * Hält dieselbe Conversation bis zur Token-Grenze am Leben und lässt Gemma
      * den Kontext davor automatisch kompakt zusammenfassen.
@@ -376,7 +376,10 @@ class LocalGemmaAssistant(private val context: Context) {
                     }
 
                     conv.sendMessageAsync(
-                        Contents.of(Content.AudioFile(partWav.absolutePath), Content.Text(promptText)),
+                        // Die Conversation-API erwartet den vollständigen WAV-Container als Blob.
+                        // Content.AudioFile übergibt bei diesem LiteRT-Build nur einen lokalen
+                        // Pfad ohne nutzbaren Modell-Anhang; Gemma meldet dann "keine Aufnahme".
+                        Contents.of(Content.AudioBytes(partWav.readBytes()), Content.Text(promptText)),
                         callback,
                         mapOf("clear_kv_cache_before_prefill" to false)
                     )
