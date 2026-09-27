@@ -374,17 +374,23 @@ object AppModelManager {
         context: Context,
         filename: String,
         expectedCrc32: Long
-    ): File? = tryImportFromPublicDownloads(context, filename, expectedCrc32) { _, _ -> }
+    ): File? = tryImportFromPublicDownloads(context, filename, expectedCrc32, null) { _, _ -> }
 
 
     private suspend fun tryImportFromPublicDownloads(
         context: Context,
         filename: String,
-        expectedCrc32: Long,
+        expectedCrc32: Long?,
+        expectedSha256: String?,
         onProgress: suspend (bytesCopied: Long, totalBytes: Long) -> Unit
     ): File? = withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext null
         try {
+            fun isValid(file: File): Boolean = when {
+                expectedSha256 != null -> calculateSha256(file).equals(expectedSha256, ignoreCase = true)
+                expectedCrc32 != null -> calculateCrc32(file) == expectedCrc32
+                else -> false
+            }
             val sel = "${MediaStore.Downloads.DISPLAY_NAME}=? AND ${MediaStore.Downloads.RELATIVE_PATH} LIKE ?"
             val args = arrayOf(filename, "%${publicDownloadFolder(filename).removePrefix("Download/")}%")
             data class Candidate(val uri: android.net.Uri, val size: Long)
@@ -431,7 +437,7 @@ object AppModelManager {
                         }
                     }
                     onProgress(tmp.length(), size)
-                    if (calculateCrc32(tmp) == expectedCrc32) {
+                    if (isValid(tmp)) {
                         val dest = File(targetDir, filename)
                         if (!tmp.renameTo(dest)) {
                             tmp.copyTo(dest, overwrite = true)
@@ -490,11 +496,9 @@ object AppModelManager {
         // Always import via MediaStore first instead of re-downloading —
         // a complete local file beats any resume. On success discard old
         // partial download.
-        val imported = if (expectedCrc32 != null) {
-            tryImportFromPublicDownloads(context, targetFileName, expectedCrc32) { copied, total ->
-                emit(DownloadProgress(targetFileName, copied, total, false))
-            }
-        } else null
+        val imported = tryImportFromPublicDownloads(context, targetFileName, expectedCrc32, expectedSha256) { copied, total ->
+            emit(DownloadProgress(targetFileName, copied, total, false))
+        }
         if (imported != null) {
             try { if (tempFile.exists()) tempFile.delete() } catch (_: Exception) {}
             emit(DownloadProgress(targetFileName, imported.length(), imported.length(), true))

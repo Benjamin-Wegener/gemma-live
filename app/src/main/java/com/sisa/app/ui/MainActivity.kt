@@ -197,9 +197,9 @@ class MainActivity : ComponentActivity() {
         engineStatus.value = "Loading engine …"
         scope.launch(Dispatchers.Default) {
             // Auto-download Gemma model if not found (with progress, resume, retry)
-            if (!com.sisa.app.download.AppModelManager.isModelInstalled(this@MainActivity, com.sisa.app.download.AppModelManager.GEMMA_FILE)) {
-                engineStatus.value = "Downloading Gemma model…"
-                android.util.Log.i("LiveMode", "Gemma model not found, starting auto-download")
+            if (!com.sisa.app.download.AppModelManager.isPrivateModelInstalled(this@MainActivity, com.sisa.app.download.AppModelManager.GEMMA_FILE)) {
+                engineStatus.value = "Checking Download/models for Gemma…"
+                android.util.Log.i("LiveMode", "Checking Download/models before network download")
                 var retryCount = 0
                 val maxRetries = 3
                 var downloadSuccess = false
