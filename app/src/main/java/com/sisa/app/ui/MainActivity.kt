@@ -156,6 +156,10 @@ class MainActivity : ComponentActivity() {
     var selectedVoiceId = mutableStateOf("de_DE-kerstin-low")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // This is a hands-free live conversation screen. Keep the display awake
+        // while this foreground activity is visible; Android releases the flag
+        // automatically when the app leaves the foreground.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         audioSourceMode = loadAudioSourceMode()
         android.util.Log.i("LiveMode", "AudioSourceMode=$audioSourceMode")
         if (audioSourceMode == "capture") ensureCaptureHolder()
