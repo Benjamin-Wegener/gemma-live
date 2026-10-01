@@ -110,21 +110,22 @@ class LocalGemmaAssistant(private val context: Context) {
         const val LLM_TEMPERATURE = 0.2
         const val LLM_TOP_K = 20
         const val LLM_TOP_P = 0.90
-        fun getSystemPrompt(language: String = "en"): String = when (language) {
-            "de" -> "Du bist Gemma, eine freundliche, hilfsbereite KI im schnellen " +
-                    "Live-Sprachmodus. Antworte ausschließlich auf Deutsch, kurz, prägnant " +
-                    "und direkt in 1 bis 2 Sätzen."
-            "es" -> "Eres Gemma, una IA amable y servicial en modo de voz en directo. " +
-                    "Responde exclusivamente en español, de forma breve, concisa y directa en 1 o 2 frases."
-            
-            "zh" -> "你是 Gemma，一个在快速实时语音模式下友好、热心的 AI。请完全用中文回答，简明扼要，控制在 1 到 2 句话以内。"
-            "ru" -> "Ты — Gemma, дружелюбный и полезный ИИ в режиме голосового диалога. " +
-                    "Отвечай исключительно на русском языке, кратко, лаконично и прямо в 1–2 предложениях."
-            "hi" -> "आप Gemma हैं, त्वरित लाइव वॉयस मोड में एक मित्रवत और सहायक AI। केवल हिंदी में, संक्षेप में और सीधे 1 से 2 वाक्यों में उत्तर दें।"
-            
-            else -> "You are Gemma, a friendly, helpful AI in fast " +
-                    "live voice mode. Answer exclusively in English, short, concise " +
-                    "and directly in 1 to 2 sentences."
+        /**
+         * System prompt is ALWAYS English (Issue #7: instruction text and all
+         * control wording stay English so template parsing never breaks).
+         * Only the answer-language directive varies per selected language.
+         */
+        fun getSystemPrompt(language: String = "en"): String {
+            val answerDirective = when (language) {
+                "de" -> "Answer exclusively in German"
+                "es" -> "Answer exclusively in Spanish"
+                "zh" -> "Answer exclusively in Chinese"
+                "ru" -> "Answer exclusively in Russian"
+                "hi" -> "Answer exclusively in Hindi"
+                else -> "Answer exclusively in English"
+            }
+            return "You are Gemma, a friendly, helpful AI in fast live voice mode. " +
+                    "$answerDirective, short, concise and directly in 1 to 2 sentences."
         }
         /** Chunker-Paritaet zu E2BAIService: erster Chunk ab 2 Woertern an die TTS für minimale Latenz. */
         private const val FIRST_CHUNK_MIN_WORDS = 2
