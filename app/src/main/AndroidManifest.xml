@@ -18,11 +18,11 @@
     </queries>
 
     <application
-        android:name=".SisaApp"
+        android:name=".GemmaApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Gemma Live"
-        android:theme="@style/Theme.Sisa"
+        android:theme="@style/Theme.Gemma"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
@@ -37,7 +37,7 @@
             android:name=".ui.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.Sisa">
+            android:theme="@style/Theme.Gemma">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

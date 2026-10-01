@@ -51,6 +51,7 @@ import com.sisa.app.ai.LocalGemmaAssistant
 import com.sisa.app.ai.TurnDetector
 import com.sisa.app.stt.AndroidSttManager
 import com.sisa.app.tts.AndroidTtsService
+import com.sisa.app.tts.GemmaVoiceService
 import com.sisa.app.tts.SisaVoiceService
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
@@ -65,7 +66,8 @@ data class ChatBubbleMessage(val text: String, val fromUser: Boolean)
 class MainActivity : ComponentActivity() {
 
     private lateinit var androidTts: AndroidTtsService
-    private lateinit var sisaVoice: SisaVoiceService
+    private lateinit var voiceService: com.sisa.app.tts.GemmaVoiceService
+    private val sisaVoice get() = voiceService
     private var sttManager: AndroidSttManager? = null
     private val speechBuffer = java.io.ByteArrayOutputStream()
     private val speechBufferLock = Any()
@@ -176,8 +178,7 @@ class MainActivity : ComponentActivity() {
         if (audioSourceMode == "capture") ensureCaptureHolder()
 
         androidTts = AndroidTtsService(this)
-        sisaVoice = SisaVoiceService(this, androidTts)
-        sisaVoice.initAsync { }
+        voiceService = com.sisa.app.tts.GemmaVoiceService(this, androidTts)
 
         // Gemma E2B handles direct audio. Android STT remains an optional fallback.
         sttManager = AndroidSttManager(
@@ -210,7 +211,13 @@ class MainActivity : ComponentActivity() {
         val savedVoiceId = voicePrefs.getString("selected_voice_id", "en_US-amy-medium")
             ?: "en_US-amy-medium"
         selectedVoiceId.value = savedVoiceId
-        localGemma.currentLanguage = if (savedVoiceId.startsWith("de_")) "de" else "en"
+        val initialVoice = com.sisa.app.download.AppModelManager.PIPER_VOICES.find { it.id == savedVoiceId }
+            ?: com.sisa.app.download.AppModelManager.PIPER_VOICES.first()
+        val lang = initialVoice.id.substringBefore("_")
+        localGemma.currentLanguage = lang
+        voiceService.currentLanguage = lang
+        androidTts.setLanguage(java.util.Locale.forLanguageTag(lang))
+        voiceService.initAsync(initialVoice.modelFile) { }
         liveState.value = LiveState.LOADING
         isHandsFreeActive.value = false
         engineStatus.value = "Loading engine …"
@@ -343,7 +350,8 @@ class MainActivity : ComponentActivity() {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
+                                        .clickable { selectedId = voice.id }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     androidx.compose.material3.RadioButton(
@@ -363,19 +371,24 @@ class MainActivity : ComponentActivity() {
                             prefs.edit().putBoolean("voice_selected", true)
                                 .putString("selected_voice_id", selectedId).apply()
                             // Set language based on voice selection
-                            val lang = if (selectedId.startsWith("de_")) "de" else "en"
+                            val lang = selectedId.substringBefore("_")
                             localGemma.currentLanguage = lang
+                            voiceService.currentLanguage = lang
+                            androidTts.setLanguage(java.util.Locale.forLanguageTag(lang))
                             // Download selected voice if needed
                             scope.launch(Dispatchers.Default) {
                                 val voice = voices.find { it.id == selectedId } ?: return@launch
                                 if (!com.sisa.app.download.AppModelManager.isModelInstalled(this@MainActivity, voice.modelFile)) {
-                                    engineStatus.value = "Downloading voice: ${voice.name}…"
+                                    withContext(Dispatchers.Main) {
+                                        engineStatus.value = "Downloading voice: ${voice.name}…"
+                                    }
                                     try {
                                         com.sisa.app.download.AppModelManager.downloadModel(
                                             context = this@MainActivity,
                                             urlString = voice.downloadUrl,
                                             targetFileName = voice.modelFile,
-                                            expectedCrc32 = if (voice.crc32 != 0L) voice.crc32 else null
+                                            expectedCrc32 = if (voice.crc32 != 0L) voice.crc32 else null,
+                                            expectedSha256 = voice.sha256
                                         ).collect { progress ->
                                             if (progress.isCompleted) {
                                                 withContext(Dispatchers.Main) {
@@ -394,10 +407,7 @@ class MainActivity : ComponentActivity() {
                                         android.util.Log.e("LiveMode", "Voice download failed", e)
                                     }
                                 }
-                                // Re-init TTS with new voice
-                                sisaVoice.shutdown()
-                                sisaVoice = SisaVoiceService(this@MainActivity, androidTts)
-                                sisaVoice.initAsync { }
+                                voiceService.loadVoice(voice.modelFile)
                             }
                         }) {
                             Text("OK")
@@ -737,7 +747,7 @@ class MainActivity : ComponentActivity() {
                                     // (sisaVoice.ECHO_TAIL_MS) offen. Hier ist die 900ms-Anlaufzeit
                                     // nicht mehr relevant — entscheidet nur noch die Lautstärke.
                                     val tailMs = if (sisaVoice.audioEndedNs > 0L) (nowNs - sisaVoice.audioEndedNs) / 1_000_000L else Long.MAX_VALUE
-                                    val inEchoTail = tailMs < SisaVoiceService.ECHO_TAIL_MS
+                                    val inEchoTail = tailMs < GemmaVoiceService.ECHO_TAIL_MS
                                     if (inEchoTail && loudEnough) {
                                         android.util.Log.i("LiveMode", "VAD SpeechStarted = Nutzer direkt nach Antwortende (${tailMs}ms nach Audioende, peak=${frame.peak})")
                                         android.util.Log.i("BENCH", "BENCH barge_in t_elapsed_ns=$nowNs peak=${frame.peak} tailMs=$tailMs")
@@ -1138,6 +1148,15 @@ fun LiveModeScreen(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text("Gemma Live", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            if (liveState == LiveState.SPEAKING) {
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    "• Speaking",
+                                    color = stateColor,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
 
                         // Toggle button: ? <-> X

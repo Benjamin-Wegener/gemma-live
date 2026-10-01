@@ -18,10 +18,14 @@ class AndroidTtsService(private val context: Context) : TextToSpeech.OnInitListe
     private var pendingDone: (() -> Unit)? = null
     private var activeCount = 0
 
+    fun setLanguage(locale: Locale) {
+        tts?.setLanguage(locale)
+    }
+
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             tts?.let {
-                val result = it.setLanguage(Locale.GERMAN)
+                val result = it.setLanguage(Locale.US)
                 if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
                     isInitialized = true
                 }

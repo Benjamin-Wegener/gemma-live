@@ -22,16 +22,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /**
- * Sisa-Stimme (Kerstin, Piper VITS, weiblich) via sherpa-onnx.
- * Das Modell liegt in der APK und wird beim ersten Start CRC-geprüft
- * in den App-Speicher entpackt — kein Download.
- *
- * Garantie: [speak] wartet auf die Engine (bis zu 60 s), statt sofort auf
- * Android-TTS auszuweichen. Fallback nur, wenn die Engine fehlt/fehlschlägt.
- * [onDone] meldet das echte Wiedergabe-Ende (AudioTrack-Marker bzw.
- * TTS-Utterance-Callback), damit Dialoge erst danach zuhören.
+ * Gemma voice service (Piper VITS) via sherpa-onnx.
+ * Supports dynamic voice loading per language selection with fallback to Android-TTS.
  */
-class SisaVoiceService(
+class GemmaVoiceService(
     private val context: Context,
     private val fallback: AndroidTtsService
 ) {
@@ -46,9 +40,6 @@ class SisaVoiceService(
         private set
     /**
      * elapsedRealtimeNanos des physischen Audioendes (Playback-Marker), 0 solange gesprochen wird.
-     * Der VAD braucht nach dem letzten Lautsprecher-Sample noch ~100-400ms, bevor er wieder
-     * "Stille" meldet (Nachhall + ausklingender Konus) — genau in diesem Fenster entstehen
-     * VAD-Segmente, die nur der eigene Nachhall sind. MainActivity verwirft sie als Echo.
      */
     @Volatile var audioEndedNs: Long = 0L
         private set
@@ -56,6 +47,8 @@ class SisaVoiceService(
     private val readySignal = CompletableDeferred<Boolean>()
 
     val isReady: Boolean get() = tts != null
+
+    var currentLanguage: String = "en"
 
     private fun takeDone(): (() -> Unit)? {
         val d = pendingDone
@@ -81,9 +74,7 @@ class SisaVoiceService(
     }
 
     /**
-     * Nach dem echten Audioende noch [ECHO_TAIL_MS] "Sprechen" halten. Ein VAD-Segment, das
-     * in diesem Fenster startet, ist mit hoher Wahrscheinlichkeit der eigene Nachhall; es wird
-     * nur dann behalten, wenn es laut genug für eine echte Nahbesprechung ist (Barge-In).
+     * Nach dem echten Audioende noch [ECHO_TAIL_MS] "Sprechen" halten.
      */
     private fun markSpeakingAfterEchoTail() {
         audioEndedNs = android.os.SystemClock.elapsedRealtimeNanos()
@@ -93,44 +84,71 @@ class SisaVoiceService(
 
     private val notSpeakingTail = Runnable { markNotSpeaking() }
 
-    /** Asynchron initialisieren (Modell laden dauert beim 1. Start ~30 s). */
-    fun initAsync(onReady: ((Boolean) -> Unit)? = null) {
-        if (tts != null || initializing) {
-            val ready = tts != null
-            if (!readySignal.isCompleted) readySignal.complete(ready)
-            onReady?.invoke(ready)
-            return
-        }
-        initializing = true
+    /** Loads or switches to the specified Piper ONNX voice model. */
+    fun loadVoice(voiceModelFile: String, onReady: ((Boolean) -> Unit)? = null) {
         scope.launch {
+            stop(reason = "voice_switch")
+            val dir = AppModelManager.getModelsDir(context)
+            val modelFile = AppModelManager.getModelFile(context, voiceModelFile)
+            if (!modelFile.exists() || modelFile.length() < 1024) {
+                Log.w(TAG, "Voice model file not available: ${modelFile.absolutePath}")
+                withContext(Dispatchers.Main) { onReady?.invoke(false) }
+                return@launch
+            }
+            withContext(Dispatchers.IO) {
+                AppModelManager.ensureVoiceFromBundle(context)
+            }
+            val tokensPath = File(dir, AppModelManager.VOICE_TOKENS_FILE).absolutePath
+            val espeakDataDir = File(dir, AppModelManager.ESPEAK_DATA_DIR).absolutePath
             val ok = try {
-                val ensured = withContext(Dispatchers.IO) {
-                    AppModelManager.ensureVoiceFromBundle(context)
-                }
-                if (!ensured) {
-                    false
-                } else {
-                    val dir = AppModelManager.getModelsDir(context)
-                    val modelPath = File(dir, AppModelManager.VOICE_MODEL_FILE).absolutePath
-                    val tokensPath = File(dir, AppModelManager.VOICE_TOKENS_FILE).absolutePath
-                    val espeakDataDir = File(dir, AppModelManager.ESPEAK_DATA_DIR).absolutePath
-                    // Piper VITS: Modell + Phonem-Tokens + espeak-ng-data (Phonemisierung)
-                    val vits = OfflineTtsVitsModelConfig(model = modelPath, tokens = tokensPath, dataDir = espeakDataDir)
-                    val model = OfflineTtsModelConfig(vits = vits, numThreads = 2, provider = "cpu")
-                    val config = OfflineTtsConfig(model = model, maxNumSentences = 1)
-                    tts = OfflineTts(config = config)
-                    Log.i(TAG, "Sisa-Stimme bereit (Abtastrate ${tts?.sampleRate()} Hz)")
-                    true
-                }
+                val vits = OfflineTtsVitsModelConfig(
+                    model = modelFile.absolutePath,
+                    tokens = tokensPath,
+                    dataDir = espeakDataDir
+                )
+                val model = OfflineTtsModelConfig(vits = vits, numThreads = 2, provider = "cpu")
+                val config = OfflineTtsConfig(model = model, maxNumSentences = 1)
+                val newTts = OfflineTts(config = config)
+                val old = tts
+                tts = newTts
+                try { old?.free() } catch (_: Exception) {}
+                // Re-initialize AudioTrack with the new voice's sample rate on next speak
+                try {
+                    audioTrack?.stop()
+                    audioTrack?.release()
+                } catch (_: Exception) {}
+                audioTrack = null
+                Log.i(TAG, "Gemma voice ready: $voiceModelFile (sample rate ${newTts.sampleRate()} Hz)")
+                true
             } catch (e: Exception) {
-                Log.e(TAG, "Sisa-Stimme Init fehlgeschlagen, Fallback Android-TTS", e)
-                try { tts?.free() } catch (_: Exception) {}
-                tts = null
+                Log.e(TAG, "Gemma voice init failed for $voiceModelFile, fallback to Android-TTS", e)
                 false
             }
-            initializing = false
             if (!readySignal.isCompleted) readySignal.complete(ok)
             withContext(Dispatchers.Main) { onReady?.invoke(ok) }
+        }
+    }
+
+    /** Asynchron initialisieren (Standard- oder gespeicherte Stimme). */
+    fun initAsync(voiceModelFile: String = AppModelManager.VOICE_MODEL_FILE, onReady: ((Boolean) -> Unit)? = null) {
+        if (tts != null) {
+            onReady?.invoke(true)
+            return
+        }
+        val dir = AppModelManager.getModelsDir(context)
+        val file = AppModelManager.getModelFile(context, voiceModelFile)
+        if (file.exists() && file.length() > 1024) {
+            loadVoice(voiceModelFile, onReady)
+        } else {
+            scope.launch {
+                withContext(Dispatchers.IO) { AppModelManager.ensureVoiceFromBundle(context) }
+                val f = AppModelManager.getModelFile(context, voiceModelFile)
+                if (f.exists() && f.length() > 1024) {
+                    loadVoice(voiceModelFile, onReady)
+                } else {
+                    withContext(Dispatchers.Main) { onReady?.invoke(false) }
+                }
+            }
         }
     }
 
@@ -142,7 +160,7 @@ class SisaVoiceService(
 
     private fun initAudioTrack() {
         if (audioTrack != null) return
-        val sampleRate = 16_000
+        val sampleRate = tts?.sampleRate()?.takeIf { it > 0 } ?: 16_000
         val channelConfig = android.media.AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = android.media.AudioFormat.ENCODING_PCM_16BIT
         // AAudio FastTrack: Buffer auf die von Android gemeldete Mindestgröße
@@ -242,7 +260,7 @@ class SisaVoiceService(
             return
         }
         beginSpeaking()
-        val clean = germanize(text)
+        val clean = cleanTextForTts(text)
         // Unterbricht den Vorgänger. Das ist der Normalfall beim Chunk-Wechsel
         // innerhalb derselben Antwort und darf NICHT als Barge-In gezählt werden —
         // sonst verfälscht jeder Folge-Chunk die Barge-In-RT-Metrik (metrics.py
@@ -250,9 +268,9 @@ class SisaVoiceService(
         stop(reason = "chunk_switch")
         stopRequested = false
         pendingDone = onDone
-        initAudioTrack()
         scope.launch {
             withTimeoutOrNull(60_000L) { readySignal.await() }
+            initAudioTrack()
             val engine = tts
             if (engine == null || stopRequested) {
                 if (stopRequested) {
@@ -363,11 +381,9 @@ class SisaVoiceService(
         }
 
     /**
-     * Englische Wörter & Abkürzungen für Kerstin (deutsche espeak-Stimme)
-     * aussprechbar machen: Abkürzungen werden buchstabiert, Sonderzeichen
-     * ausgeschrieben. Gilt für Engine + Fallback.
+     * Cleans and normalizes text for Piper TTS synthesis.
      */
-    private fun germanize(text: String): String {
+    private fun cleanTextForTts(text: String): String {
         var s = text
         val tags = listOf("<start_of_turn>", "<end_of_turn>", "<eos>", "<pad>", "<|im_end|>", "<|im_start|>", "<|endoftext|>", "end_of_turn", "start_of_turn")
         for (tag in tags) {
@@ -375,28 +391,40 @@ class SisaVoiceService(
         }
         s = s.replace(Regex("<[^>]+>"), "")
         val spelled = mapOf(
-            "PDF" to "P D F", "E-Mail" to "E Mail", "E-Mails" to "E Mails",
-            "STT" to "S T T", "TTS" to "T T S", "LLM" to "L L M",
-            "GPU" to "G P U", "MTP" to "M T P", "USB" to "U S B",
-            "ID" to "I D", "QR" to "Q R", "URL" to "U R L", "WLAN" to "W L A N",
-            "PIN" to "P I N", "SMS" to "S M S", "OK" to "O K",
-            "SIS" to "S I S", "STEP" to "S T E P", "DSGVO" to "D S G V O",
-            "ICD" to "I C D", "ATC" to "A T C", "NRS" to "N R S",
-            "MNA" to "M N A", "CAM" to "C A M", "GDS" to "G D S",
-            "VAS" to "V A S"
+            "PDF" to "P D F", "AI" to "A I", "KI" to "K I", "STT" to "S T T",
+            "TTS" to "T T S", "LLM" to "L L M", "GPU" to "G P U", "MTP" to "M T P",
+            "USB" to "U S B", "ID" to "I D", "QR" to "Q R", "URL" to "U R L",
+            "WLAN" to "W L A N", "PIN" to "P I N", "SMS" to "S M S", "OK" to "O K"
         )
         for ((k, v) in spelled) {
             s = s.replace(Regex("\\b${Regex.escape(k)}\\b"), v)
         }
-        s = s.replace("&", " und ")
+        val andWord = when (currentLanguage) {
+            "de" -> " und "
+            "es" -> " y "
+            "fr" -> " et "
+            "it" -> " e "
+            "ru" -> " и "
+            else -> " and "
+        }
+        s = s.replace("&", andWord)
         s = s.replace("®", "")
-        s = s.replace("z.B.", "zum Beispiel")
-            .replace("bzw.", "beziehungsweise")
-            .replace("ggf.", "gegebenenfalls")
-            .replace("ca.", "circa")
-        s = s.replace("%", " Prozent ")
-            .replace("€", " Euro ")
-            .replace("§", " Paragraph ")
+        if (currentLanguage == "de") {
+            s = s.replace("z.B.", "zum Beispiel")
+                .replace("bzw.", "beziehungsweise")
+                .replace("ggf.", "gegebenenfalls")
+                .replace("ca.", "circa")
+                .replace("%", " Prozent ")
+                .replace("€", " Euro ")
+                .replace("§", " Paragraph ")
+        } else {
+            s = s.replace("e.g.", "for example")
+                .replace("i.e.", "that is")
+                .replace("approx.", "approximately")
+                .replace("%", " percent ")
+                .replace("$", " dollar ")
+                .replace("€", " euro ")
+        }
         return s.replace(Regex("\\s+"), " ").trim()
     }
 
@@ -409,7 +437,7 @@ class SisaVoiceService(
     }
 
     companion object {
-        private const val TAG = "SisaVoice"
+        private const val TAG = "GemmaVoice"
         /** Moderater Software-Gain; begrenzt vor der PCM16-Konvertierung. */
         private const val TTS_GAIN = 1.20f
 
@@ -424,3 +452,5 @@ class SisaVoiceService(
         private object EndOfPlayback
     }
 }
+
+typealias SisaVoiceService = GemmaVoiceService

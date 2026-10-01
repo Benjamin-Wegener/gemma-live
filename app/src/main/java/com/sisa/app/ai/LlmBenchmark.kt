@@ -179,8 +179,8 @@ object LlmBenchmark {
                         }
 
                         val inputs = listOf(
-                            InputData.Text("Du bist ein hilfreicher Assistent."),
-                            InputData.Text("Hallo Gemma, wie geht es dir heute?")
+                            InputData.Text("You are a helpful assistant."),
+                            InputData.Text("Hello Gemma, how are you today?")
                         )
 
                         session.generateContentStream(inputs, callback)

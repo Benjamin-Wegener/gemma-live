@@ -114,6 +114,16 @@ class LocalGemmaAssistant(private val context: Context) {
             "de" -> "Du bist Gemma, eine freundliche, hilfsbereite KI im schnellen " +
                     "Live-Sprachmodus. Antworte ausschließlich auf Deutsch, kurz, prägnant " +
                     "und direkt in 1 bis 2 Sätzen."
+            "es" -> "Eres Gemma, una IA amable y servicial en modo de voz en directo. " +
+                    "Responde exclusivamente en español, de forma breve, concisa y directa en 1 o 2 frases."
+            "fr" -> "Tu es Gemma, une IA amicale et serviable en mode vocal direct. " +
+                    "Réponds exclusivement en français, de manière brève, concise et directe en 1 ou 2 phrases."
+            "zh" -> "你是 Gemma，一个在快速实时语音模式下友好、热心的 AI。请完全用中文回答，简明扼要，控制在 1 到 2 句话以内。"
+            "ru" -> "Ты — Gemma, дружелюбный и полезный ИИ в режиме голосового диалога. " +
+                    "Отвечай исключительно на русском языке, кратко, лаконично и прямо в 1–2 предложениях."
+            "hi" -> "आप Gemma हैं, त्वरित लाइव वॉयस मोड में एक मित्रवत और सहायक AI। केवल हिंदी में, संक्षेप में और सीधे 1 से 2 वाक्यों में उत्तर दें।"
+            "it" -> "Sei Gemma, un'IA amichevole e utile in modalità vocale diretta. " +
+                    "Rispondi esclusivamente in italiano, in modo breve, conciso e diretto in 1 o 2 frasi."
             else -> "You are Gemma, a friendly, helpful AI in fast " +
                     "live voice mode. Answer exclusively in English, short, concise " +
                     "and directly in 1 to 2 sentences."
@@ -403,6 +413,31 @@ class LocalGemmaAssistant(private val context: Context) {
                             totalParts == 1 -> "Verarbeite die beigefügte Audioaufnahme. Halte dich exakt an das Ausgabeformat und die Transkript-Regeln der Systemanweisung."
                             !isLastPart -> "Hier ist Teil ${i + 1} von $totalParts des Audiosignals. Höre aufmerksam zu und warte auf die restlichen Teile vor der finalen Antwort."
                             else -> "Hier ist der letzte Teil (${i + 1} von $totalParts) des Audiosignals. Verarbeite alle Teile zusammen mit dem bisherigen Dialog und antworte direkt auf Deutsch in 1 bis 2 Sätzen."
+                        }
+                        "es" -> when {
+                            totalParts == 1 -> "Procesa la grabación de audio adjunta. Sigue exactamente las reglas de las instrucciones del sistema."
+                            !isLastPart -> "Aquí está la parte ${i + 1} de $totalParts del audio. Escucha con atención y espera el resto."
+                            else -> "Aquí está la última parte (${i + 1} de $totalParts) del audio. Procesa todo y responde directamente en español en 1 o 2 frases."
+                        }
+                        "fr" -> when {
+                            totalParts == 1 -> "Traite l'enregistrement audio ci-joint en suivant exactement les instructions du système."
+                            !isLastPart -> "Voici la partie ${i + 1} sur $totalParts du signal audio. Écoute attentivement et attends les autres parties."
+                            else -> "Voici la dernière partie (${i + 1} sur $totalParts). Traite le tout et réponds directement en français en 1 ou 2 phrases."
+                        }
+                        "zh" -> when {
+                            totalParts == 1 -> "请处理所附的音频录音，严格遵循系统指令要求。"
+                            !isLastPart -> "这是音频第 ${i + 1}/$totalParts 部分，请仔细倾听并等待剩余部分。"
+                            else -> "这是音频的最后部分（第 ${i + 1}/$totalParts 部分）。请结合上下文并完全用中文在 1 到 2 句话内回答。"
+                        }
+                        "ru" -> when {
+                            totalParts == 1 -> "Обработай прикрепленную аудиозапись, строго следуя системной инструкции."
+                            !isLastPart -> "Это часть ${i + 1} из $totalParts аудиосигнала. Внимательно слушай и жди остальные части."
+                            else -> "Это последняя часть (${i + 1} из $totalParts). Обработай весь диалог и ответь прямо на русском в 1–2 предложениях."
+                        }
+                        "hi" -> when {
+                            totalParts == 1 -> "संलग्न ऑडियो रिकॉर्डिंग को प्रोसेस करें और सिस्टम निर्देशों का पालन करें।"
+                            !isLastPart -> "यह ऑडियो का भाग ${i + 1}/$totalParts है। कृपया ध्यान से सुनें।"
+                            else -> "यह ऑडियो का अंतिम भाग (${i + 1}/$totalParts) है। सभी भागों को प्रोसेस करें और सीधे हिंदी में 1 से 2 वाक्यों में उत्तर दें।"
                         }
                         else -> when {
                             totalParts == 1 -> "Process the attached audio recording. Follow the output format and transcript rules in the system instruction exactly."

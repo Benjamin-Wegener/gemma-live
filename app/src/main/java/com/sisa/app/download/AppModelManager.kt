@@ -52,60 +52,60 @@ object AppModelManager {
         val configFile: String,
         val tokensFile: String,
         val downloadUrl: String,
-        val crc32: Long
+        val crc32: Long = 0L,
+        val sha256: String? = null
     )
 
     val PIPER_VOICES = listOf(
+        VoiceModel("en_US-amy-medium", "English (US) — Amy", "en_US-amy-medium.onnx", "en_US-amy-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-en_US-amy-medium/resolve/main/en_US-amy-medium.onnx",
+            sha256 = "fbaa8e36d8f26fe6f3ebb65cab461e629d8b37a5b7c5fb78fb64317db73e1c25"),
+        VoiceModel("en_GB-alan-medium", "English (UK) — Alan", "en_GB-alan-medium.onnx", "en_GB-alan-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-en_GB-alan-medium/resolve/main/en_GB-alan-medium.onnx",
+            sha256 = "d907c48857000940104a9ad3248a94617df917d1a525c9495490fdbf87fd54b2"),
         VoiceModel("de_DE-kerstin-low", "Deutsch — Kerstin", "de_DE-kerstin-low.onnx", "de_DE-kerstin-low.onnx.json", "tokens.txt",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/kerstin/low/de_DE-kerstin-low.onnx", 0x4071ce25L),
-        VoiceModel("en_US-amy-medium", "English (US) — Amy", "en_US-amy-medium.onnx", "en_US-amy-medium.onnx.json", "en_US-amy-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx", 0L),
-        VoiceModel("en_GB-alan-medium", "English (UK) — Alan", "en_GB-alan-medium.onnx", "en_GB-alan-medium.onnx.json", "en_GB-alan-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx", 0L),
-        VoiceModel("fr_FR-gilles-medium", "Français — Gilles", "fr_FR-gilles-medium.onnx", "fr_FR-gilles-medium.onnx.json", "fr_FR-gilles-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/gilles/medium/fr_FR-gilles-medium.onnx", 0L),
-        VoiceModel("es_ES-davefx-medium", "Español — Davefx", "es_ES-davefx-medium.onnx", "es_ES-davefx-medium.onnx.json", "es_ES-davefx-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/davefx/medium/es_ES-davefx-medium.onnx", 0L),
-        VoiceModel("it_IT-paola-medium", "Italiano — Paola", "it_IT-paola-medium.onnx", "it_IT-paola-medium.onnx.json", "it_IT-paola-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/paola/medium/it_IT-paola-medium.onnx", 0L),
-        VoiceModel("nl_NL-nathalie-medium", "Nederlands — Nathalie", "nl_NL-nathalie-medium.onnx", "nl_NL-nathalie-medium.onnx.json", "nl_NL-nathalie-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/nl/nl_NL/nathalie/medium/nl_NL-nathalie-medium.onnx", 0L),
-        VoiceModel("ru_RU-denis-medium", "Русский — Денис", "ru_RU-denis-medium.onnx", "ru_RU-denis-medium.onnx.json", "ru_RU-denis-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/denis/medium/ru_RU-denis-medium.onnx", 0L),
-        VoiceModel("ja_JP-misaki-medium", "日本語 — 美咲", "ja_JP-misaki-medium.onnx", "ja_JP-misaki-medium.onnx.json", "ja_JP-misaki-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ja/ja_JP/misaki/medium/ja_JP-misaki-medium.onnx", 0L),
-        VoiceModel("zh_CN-huayan-medium", "中文 — 华燕", "zh_CN-huayan-medium.onnx", "zh_CN-huayan-medium.onnx.json", "zh_CN-huayan-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/zh/zh_CN/huayan/medium/zh_CN-huayan-medium.onnx", 0L),
-        VoiceModel("pt_BR-edresson-medium", "Português — Edresson", "pt_BR-edresson-medium.onnx", "pt_BR-edresson-medium.onnx.json", "pt_BR-edresson-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/edresson/medium/pt_BR-edresson-medium.onnx", 0L),
-        VoiceModel("pl_PL-darkman-medium", "Polski — Darkman", "pl_PL-darkman-medium.onnx", "pl_PL-darkman-medium.onnx.json", "pl_PL-darkman-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/pl/pl_PL/darkman/medium/pl_PL-darkman-medium.onnx", 0L),
-        VoiceModel("sv_SE-nst-medium", "Svenska — Nst", "sv_SE-nst-medium.onnx", "sv_SE-nst-medium.onnx.json", "sv_SE-nst-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/sv/sv_SE/nst/medium/sv_SE-nst-medium.onnx", 0L),
-        VoiceModel("tr_TR-fahrettin-medium", "Türkçe — Fahrettin", "tr_TR-fahrettin-medium.onnx", "tr_TR-fahrettin-medium.onnx.json", "tr_TR-fahrettin-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium.onnx", 0L),
-        VoiceModel("cs_CZ-jirka-medium", "Čeština — Jirka", "cs_CZ-jirka-medium.onnx", "cs_CZ-jirka-medium.onnx.json", "cs_CZ-jirka-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/cs/cs_CZ/jirka/medium/cs_CZ-jirka-medium.onnx", 0L),
-        VoiceModel("ar_JO-kareem-medium", "العربية — كريم", "ar_JO-kareem-medium.onnx", "ar_JO-kareem-medium.onnx.json", "ar_JO-kareem-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx", 0L),
-        VoiceModel("ko_KR-kss-medium", "한국어 — Kss", "ko_KR-kss-medium.onnx", "ko_KR-kss-medium.onnx.json", "ko_KR-kss-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ko/ko_KR/kss/medium/ko_KR-kss-medium.onnx", 0L),
-        VoiceModel("vi_VN-25hours-medium", "Tiếng Việt — 25hours", "vi_VN-25hours-medium.onnx", "vi_VN-25hours-medium.onnx.json", "vi_VN-25hours-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/25hours/medium/vi_VN-25hours-medium.onnx", 0L),
-        VoiceModel("uk_UA-mykyta-medium", "Українська — Микита", "uk_UA-mykyta-medium.onnx", "uk_UA-mykyta-medium.onnx.json", "uk_UA-mykyta-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/uk/uk_UA/mykyta/medium/uk_UA-mykyta-medium.onnx", 0L),
-        VoiceModel("ca_ES-ona-medium", "Català — Ona", "ca_ES-ona-medium.onnx", "ca_ES-ona-medium.onnx.json", "ca_ES-ona-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/ca/ca_ES/ona/medium/ca_ES-ona-medium.onnx", 0L),
-        VoiceModel("el_GR-rapunzelina-medium", "Ελληνικά — Rapunzelina", "el_GR-rapunzelina-medium.onnx", "el_GR-rapunzelina-medium.onnx.json", "el_GR-rapunzelina-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/el/el_GR/rapunzelina/medium/el_GR-rapunzelina-medium.onnx", 0L),
-        VoiceModel("fi_FI-harri-medium", "Suomi — Harri", "fi_FI-harri-medium.onnx", "fi_FI-harri-medium.onnx.json", "fi_FI-harri-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/fi/fi_FI/harri/medium/fi_FI-harri-medium.onnx", 0L),
-        VoiceModel("hu_HU-anna-medium", "Magyar — Anna", "hu_HU-anna-medium.onnx", "hu_HU-anna-medium.onnx.json", "hu_HU-anna-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/hu/hu_HU/anna/medium/hu_HU-anna-medium.onnx", 0L),
-        VoiceModel("da_DK-naja-medium", "Dansk — Naja", "da_DK-naja-medium.onnx", "da_DK-naja-medium.onnx.json", "da_DK-naja-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/da/da_DK/naja/medium/da_DK-naja-medium.onnx", 0L),
-        VoiceModel("hi_IN-naman-medium", "हिन्दी — नमन", "hi_IN-naman-medium.onnx", "hi_IN-naman-medium.onnx.json", "hi_IN-naman-medium.onnx.json",
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/naman/medium/hi_IN-naman-medium.onnx", 0L)
+            "https://huggingface.co/csukuangfj/vits-piper-de_DE-kerstin-low/resolve/main/de_DE-kerstin-low.onnx",
+            crc32 = 0x4071ce25L,
+            sha256 = "c68bd25ba1cf1a0e92844a72615a5739b94eb176220dd4b229e05a2187c65789"),
+        VoiceModel("es_ES-davefx-medium", "Español — Davefx", "es_ES-davefx-medium.onnx", "es_ES-davefx-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-es_ES-davefx-medium/resolve/main/es_ES-davefx-medium.onnx",
+            sha256 = "329fc723ef304f8688df9ef819eea169a4181f60a77f53e087b19dbca07b09f8"),
+        VoiceModel("fr_FR-siwis-medium", "Français — Siwis", "fr_FR-siwis-medium.onnx", "fr_FR-siwis-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-fr_FR-siwis-medium/resolve/main/fr_FR-siwis-medium.onnx",
+            sha256 = "830f55d861ce7c8a442fd5593890ff5ee50c9d5efd4c4f42d24d537fe46d2d52"),
+        VoiceModel("zh_CN-huayan-medium", "中文 — 华燕", "zh_CN-huayan-medium.onnx", "zh_CN-huayan-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-zh_CN-huayan-medium/resolve/main/zh_CN-huayan-medium.onnx",
+            sha256 = "04234ec24907e9efa7e153669e07d4e0cf6d260adc005323aa929386dae53f86"),
+        VoiceModel("ru_RU-denis-medium", "Русский — Денис", "ru_RU-denis-medium.onnx", "ru_RU-denis-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-ru_RU-denis-medium/resolve/main/ru_RU-denis-medium.onnx",
+            sha256 = "f0129d8cbd0fef7df16a101d0cd302b25a8fd8bbda7b11af885b1e9f3e974dcf"),
+        VoiceModel("hi_IN-rohan-medium", "हिन्दी — रोहन", "hi_IN-rohan-medium.onnx", "hi_IN-rohan-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-hi_IN-rohan-medium/resolve/main/hi_IN-rohan-medium.onnx",
+            sha256 = "353d2a20bdb6dd03b74e1aff82b7a10a1646f677f8474c6c81fd606705536224"),
+        VoiceModel("it_IT-paola-medium", "Italiano — Paola", "it_IT-paola-medium.onnx", "it_IT-paola-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-it_IT-paola-medium/resolve/main/it_IT-paola-medium.onnx",
+            sha256 = "cbe315465f8a0be7db8b40f922fe906cf202996b0e15d388c540e9ac3d4b7fd7"),
+        VoiceModel("pl_PL-darkman-medium", "Polski — Darkman", "pl_PL-darkman-medium.onnx", "pl_PL-darkman-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-pl_PL-darkman-medium/resolve/main/pl_PL-darkman-medium.onnx",
+            sha256 = "fe8df9888ce02d985472355b3cad5fa2267c8bffa7c09438029bb16d07060adc"),
+        VoiceModel("sv_SE-nst-medium", "Svenska — Nst", "sv_SE-nst-medium.onnx", "sv_SE-nst-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-sv_SE-nst-medium/resolve/main/sv_SE-nst-medium.onnx",
+            sha256 = "61dd6f6a45801fb51117a74cff17957428d7156d747b163fa1fbb9c1df26278d"),
+        VoiceModel("cs_CZ-jirka-medium", "Čeština — Jirka", "cs_CZ-jirka-medium.onnx", "cs_CZ-jirka-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-cs_CZ-jirka-medium/resolve/main/cs_CZ-jirka-medium.onnx",
+            sha256 = "d41a2b0a0d488c5796b8eed3403155ee0556b7642268111f655334df97e918b8"),
+        VoiceModel("ar_JO-kareem-medium", "العربية — كريم", "ar_JO-kareem-medium.onnx", "ar_JO-kareem-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-ar_JO-kareem-medium/resolve/main/ar_JO-kareem-medium.onnx",
+            sha256 = "f942091e1fdb7221b289256cc2238295b5472d326029532f79bb84836380fe53"),
+        VoiceModel("el_GR-rapunzelina-low", "Ελληνικά — Rapunzelina", "el_GR-rapunzelina-low.onnx", "el_GR-rapunzelina-low.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-el_GR-rapunzelina-low/resolve/main/el_GR-rapunzelina-low.onnx",
+            sha256 = "5aaa1b1ea2c94e90eed2f0f7f12989df22fa2e1c3b2d781b15e93c210943c20a"),
+        VoiceModel("fi_FI-harri-medium", "Suomi — Harri", "fi_FI-harri-medium.onnx", "fi_FI-harri-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-fi_FI-harri-medium/resolve/main/fi_FI-harri-medium.onnx",
+            sha256 = "0f57368660befcb6a1c2d25547cff9fcd1fdc2edb3241676f0117c09ecb8e9b6"),
+        VoiceModel("hu_HU-anna-medium", "Magyar — Anna", "hu_HU-anna-medium.onnx", "hu_HU-anna-medium.onnx.json", "tokens.txt",
+            "https://huggingface.co/csukuangfj/vits-piper-hu_HU-anna-medium/resolve/main/hu_HU-anna-medium.onnx",
+            sha256 = "33ec97c272e650e528fb164939bc782517f50c0f0fd3c3ef9235d5b98300c67c")
     )
 
     // Verified CRC32 checksums — mandatory check after every download / bundle copy
@@ -168,20 +168,19 @@ object AppModelManager {
     }
 
     /**
-     * Sisa voice (Kerstin, female) is in the APK (assets/models) — ONLY Gemma is downloaded.
-     * Copies ONNX + JSON to app storage on first start and checks CRC.
-     * Call on IO thread (63 MB copy). Returns true if both
-     * files are present with verified CRC.
+     * Ensures Piper TTS assets (tokens.txt + espeak-ng-data) are unpacked to app storage.
+     * Voice ONNX models are downloaded on-demand per language selection.
      */
     fun ensureVoiceFromBundle(context: Context): Boolean {
-        var ok = copyAssetIfNeeded(context, "models/$VOICE_MODEL_FILE", VOICE_MODEL_FILE, VOICE_MODEL_CRC)
-        ok = copyAssetIfNeeded(context, "models/$VOICE_CONFIG_FILE", VOICE_CONFIG_FILE, VOICE_CONFIG_CRC) && ok
-        ok = copyAssetIfNeeded(context, "models/$VOICE_TOKENS_FILE", VOICE_TOKENS_FILE, VOICE_TOKENS_CRC) && ok
-        ok = copyAssetDirIfNeeded(context, ESPEAK_DATA_DIR) && ok
-        // Kleine Begleitfiles immer sichtbar in Downloads halten (5 KB, billig)
+        // tokens.txt and espeak-ng-data are bundled in APK assets
+        val tokensOk = copyAssetIfNeeded(context, "models/$VOICE_TOKENS_FILE", VOICE_TOKENS_FILE, VOICE_TOKENS_CRC)
+        val espeakOk = copyAssetDirIfNeeded(context, ESPEAK_DATA_DIR)
+        // If an ONNX voice model is present in assets (e.g. bundled build), copy it as well
+        copyAssetIfNeeded(context, "models/$VOICE_MODEL_FILE", VOICE_MODEL_FILE, VOICE_MODEL_CRC)
+        copyAssetIfNeeded(context, "models/$VOICE_CONFIG_FILE", VOICE_CONFIG_FILE, VOICE_CONFIG_CRC)
         publishToPublicDownloads(context, VOICE_CONFIG_FILE)
         publishToPublicDownloads(context, VOICE_TOKENS_FILE)
-        return ok
+        return tokensOk && espeakOk
     }
 
     /** Copies an asset directory (espeak-ng-data, 355 files) on first start. */
