@@ -830,10 +830,14 @@ class MainActivity : ComponentActivity() {
         var answer = Regex("(?s)\\[ANSWER\\]\\s*(.*?)\\s*\\[/ANSWER\\]")
             .find(raw)?.groupValues?.getOrNull(1)?.trim()
             ?: raw.replace(Regex("(?s)\\[TRANSCRIPT\\].*?\\[/TRANSCRIPT\\]"), "").trim()
-        // Reine Marker-Antwort ("[unverständlich]") nie anzeigen/vorlesen —
-        // stattdessen ehrliche Rückfrage in der aktiven Sprache.
+        // Marker- oder Echo-Antwort (Modell plappert die Anweisung nach) nie
+        // anzeigen/vorlesen — stattdessen ehrliche Rückfrage in der aktiven Sprache.
         if (answer.trim().equals("[unverständlich]", ignoreCase = true) ||
-            answer.trim().equals("[unclear]", ignoreCase = true)) {
+            answer.trim().equals("[unclear]", ignoreCase = true) ||
+            isPromptEcho(answer)) {
+            if (isPromptEcho(answer)) {
+                Log.w("LiveMode", "Discarded prompt echo incorrectly returned as answer")
+            }
             answer = if (localGemma.currentLanguage == "de") {
                 "Ich habe dich leider nicht verstanden. Kannst du das bitte wiederholen?"
             } else {
@@ -843,20 +847,17 @@ class MainActivity : ComponentActivity() {
         return transcript to answer
     }
 
-    /** A short/quiet first recording can make the model echo the audio instruction. */
-    private fun isPromptLeak(text: String): Boolean {
+    /**
+     * Echte Per-Turn-Prompttexte (LocalGemmaAssistant.promptText u.a.), die das
+     * Modell gerne wörtlich wiedergibt — geprüft in Transkript UND Antwort.
+     * (Absichtlich ohne generische Wörter wie "transcript": Die Antwort darf
+     * das Wort Transkript in normalem Kontext enthalten.)
+     */
+    private fun isPromptEcho(text: String): Boolean {
         val normalized = text.lowercase()
             .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
             .filter(Char::isLetterOrDigit)
         return listOf(
-            "beantworteausschliesslichdengesprocheneninhalt",
-            "wiederholedieseanweisung",
-            "transcript",
-            "recognizedspokentext",
-            "onlyaudiblewords",
-            "systemprompt",
-            // Echte Per-Turn-Prompttexte (LocalGemmaAssistant.promptText u.a.),
-            // die das Modell gerne wörtlich ins TRANSCRIPT kopiert:
             "verarbeitediebeigefuegteaudioaufnahme",
             "haltedichexaktandasausgabeformat",
             "transkriptregeln",
@@ -875,6 +876,21 @@ class MainActivity : ComponentActivity() {
             "dergespraechspartnerhatgesprochen",
             "theconversationpartnerhasspoken"
         ).any(normalized::contains)
+    }
+
+    /** A short/quiet first recording can make the model echo the audio instruction. */
+    private fun isPromptLeak(text: String): Boolean {
+        val normalized = text.lowercase()
+            .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+            .filter(Char::isLetterOrDigit)
+        return listOf(
+            "beantworteausschliesslichdengesprocheneninhalt",
+            "wiederholedieseanweisung",
+            "transcript",
+            "recognizedspokentext",
+            "onlyaudiblewords",
+            "systemprompt"
+        ).any(normalized::contains) || isPromptEcho(text)
     }
 
     private fun interruptAiSpeech() {
