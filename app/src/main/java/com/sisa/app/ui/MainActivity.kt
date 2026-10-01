@@ -265,30 +265,32 @@ class MainActivity : ComponentActivity() {
                 }
             }
             // LiteRT exposes no sub-step callbacks while the engine maps and
-            // prepares the model. Reserve the last percent for that phase and
-            // advance it monotonically until the real ready signal arrives.
-            val engineProgressJob = if (downloadedGemmaThisLaunch) {
-                scope.launch {
-                    modelDownloadProgress.floatValue = 0.99f
-                    engineStatus.value = "Loading Gemma engine… 99.0%"
-                    while (isActive) {
-                        kotlinx.coroutines.delay(300)
-                        val next = (modelDownloadProgress.floatValue + 0.001f).coerceAtMost(0.999f)
-                        modelDownloadProgress.floatValue = next
-                        engineStatus.value = "Loading Gemma engine… ${"%.1f".format(next * 100)}%"
+            // prepares the model. Use a monotonic estimated progress value so
+            // the bar also advances when a previously downloaded model loads.
+            val engineProgressJob = scope.launch {
+                if (downloadedGemmaThisLaunch) modelDownloadProgress.floatValue = 0.99f
+                engineStatus.value = "Loading Gemma engine… ${"%.1f".format(modelDownloadProgress.floatValue * 100)}%"
+                while (isActive) {
+                    kotlinx.coroutines.delay(300)
+                    val current = modelDownloadProgress.floatValue
+                    val step = when {
+                        current < 0.90f -> 0.015f
+                        current < 0.99f -> 0.003f
+                        else -> 0.001f
                     }
+                    val next = (current + step).coerceAtMost(0.999f)
+                    modelDownloadProgress.floatValue = next
+                    engineStatus.value = "Loading Gemma engine… ${"%.1f".format(next * 100)}%"
                 }
-            } else null
+            }
             val loadInfo = localGemma.load()
             engineProgressJob?.cancel()
             withContext(Dispatchers.Main) {
                 if (loadInfo != null) {
                     android.util.Log.i("LiveMode", "LocalGemma ready: ${loadInfo.backend.label}, ${loadInfo.modelFile}")
-                    if (downloadedGemmaThisLaunch) {
-                        modelDownloadProgress.floatValue = 1f
-                        engineStatus.value = "Gemma model ready… 100%"
-                        kotlinx.coroutines.delay(250)
-                    }
+                    modelDownloadProgress.floatValue = 1f
+                    engineStatus.value = "Gemma model ready… 100%"
+                    kotlinx.coroutines.delay(250)
                     isEngineReady.value = true
                     engineStatus.value = "Ready (${loadInfo.backend.label})"
                     // Auto-start hands-free once engine is loaded
