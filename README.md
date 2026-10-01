@@ -22,6 +22,25 @@
 | Audio | 16 kHz mono, hardware AEC |
 | UI | Jetpack Compose (Material 3) |
 
+## Help: Pixel 8a reference device
+
+Gemma Live is actively tested on the Google Pixel 8a. Its Google Tensor G3,
+8 GB LPDDR5X RAM, and 128 GB / 256 GB UFS 3.1 storage make it a practical
+reference device for local voice inference. The 6.1-inch, 120 Hz OLED display
+and 4,492 mAh typical battery are also useful for extended hands-free testing.
+See Google's [official Pixel 8a technical specifications](https://support.google.com/pixelphone/answer/7158570?hl=en).
+
+Synthetic scores vary with Android version, temperature, battery level, and
+benchmark release. Useful current reference ranges are:
+
+| Benchmark | Pixel 8a reference result |
+|-----------|---------------------------|
+| Geekbench 6 CPU, single-core | about 1,565–1,640 |
+| Geekbench 6 CPU, multi-core | about 3,794–4,193 |
+| AnTuTu | about 1.43M |
+
+The Geekbench range comes from a recent [Geekbench Browser result](https://browser.geekbench.com/v6/cpu/18055935) and an independent [Pixel 8a review](https://www.tomsguide.com/phones/google-pixel-phones/google-pixel-8a-review). The AnTuTu figure is a community-reported reference and should be treated as approximate; see [NanoReview's current aggregation](https://nanoreview.net/en/phone/google-pixel-8a).
+
 ## Building
 
 ```bash
