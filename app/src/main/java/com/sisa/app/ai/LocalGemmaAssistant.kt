@@ -116,14 +116,12 @@ class LocalGemmaAssistant(private val context: Context) {
                     "und direkt in 1 bis 2 Sätzen."
             "es" -> "Eres Gemma, una IA amable y servicial en modo de voz en directo. " +
                     "Responde exclusivamente en español, de forma breve, concisa y directa en 1 o 2 frases."
-            "fr" -> "Tu es Gemma, une IA amicale et serviable en mode vocal direct. " +
-                    "Réponds exclusivement en français, de manière brève, concise et directe en 1 ou 2 phrases."
+            
             "zh" -> "你是 Gemma，一个在快速实时语音模式下友好、热心的 AI。请完全用中文回答，简明扼要，控制在 1 到 2 句话以内。"
             "ru" -> "Ты — Gemma, дружелюбный и полезный ИИ в режиме голосового диалога. " +
                     "Отвечай исключительно на русском языке, кратко, лаконично и прямо в 1–2 предложениях."
             "hi" -> "आप Gemma हैं, त्वरित लाइव वॉयस मोड में एक मित्रवत और सहायक AI। केवल हिंदी में, संक्षेप में और सीधे 1 से 2 वाक्यों में उत्तर दें।"
-            "it" -> "Sei Gemma, un'IA amichevole e utile in modalità vocale diretta. " +
-                    "Rispondi esclusivamente in italiano, in modo breve, conciso e diretto in 1 o 2 frasi."
+            
             else -> "You are Gemma, a friendly, helpful AI in fast " +
                     "live voice mode. Answer exclusively in English, short, concise " +
                     "and directly in 1 to 2 sentences."
@@ -419,11 +417,7 @@ class LocalGemmaAssistant(private val context: Context) {
                             !isLastPart -> "Aquí está la parte ${i + 1} de $totalParts del audio. Escucha con atención y espera el resto."
                             else -> "Aquí está la última parte (${i + 1} de $totalParts) del audio. Procesa todo y responde directamente en español en 1 o 2 frases."
                         }
-                        "fr" -> when {
-                            totalParts == 1 -> "Traite l'enregistrement audio ci-joint en suivant exactement les instructions du système."
-                            !isLastPart -> "Voici la partie ${i + 1} sur $totalParts du signal audio. Écoute attentivement et attends les autres parties."
-                            else -> "Voici la dernière partie (${i + 1} sur $totalParts). Traite le tout et réponds directement en français en 1 ou 2 phrases."
-                        }
+
                         "zh" -> when {
                             totalParts == 1 -> "请处理所附的音频录音，严格遵循系统指令要求。"
                             !isLastPart -> "这是音频第 ${i + 1}/$totalParts 部分，请仔细倾听并等待剩余部分。"

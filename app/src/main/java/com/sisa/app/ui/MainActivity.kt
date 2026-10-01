@@ -167,6 +167,9 @@ class MainActivity : ComponentActivity() {
     private var showBenchDialog = mutableStateOf(false)
     var showVoiceSelector = mutableStateOf(false)
     var selectedVoiceId = mutableStateOf("en_US-amy-medium")
+    var isVoiceDownloading = mutableStateOf(false)
+    var voiceDownloadProgress = mutableFloatStateOf(0f)
+    var voiceDownloadError = mutableStateOf<String?>(null)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // This is a hands-free live conversation screen. Keep the display awake
