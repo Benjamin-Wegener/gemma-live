@@ -65,13 +65,13 @@ class AndroidSttManager(
                             return
                         }
                         val errorMsg = when (error) {
-                            SpeechRecognizer.ERROR_NO_MATCH -> "Keine Sprache erkannt"
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Keine Eingabe (Timeout)"
-                            SpeechRecognizer.ERROR_AUDIO -> "Audio-Aufnahmefehler"
-                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Mikrofon-Berechtigung fehlt"
+                            SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized"
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No input (timeout)"
+                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is missing"
                             SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
-                            SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "Deutsche Spracherkennung fehlt (offline + online)"
-                            else -> "STT-Fehler: $error"
+                            SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "English speech recognition is unavailable (offline and online)"
+                            else -> "Speech recognition error: $error"
                         }
                         onError(errorMsg)
                     }
@@ -109,11 +109,11 @@ class AndroidSttManager(
         lastPreferOffline = preferOffline
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "de-DE")
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "de-DE")
-            putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("de-DE", "de"))
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
+            putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-US", "en"))
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Bitte sprechen...")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now…")
             if (preferOffline) {
                 putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             }

@@ -164,7 +164,7 @@ class MainActivity : ComponentActivity() {
     private var benchReport = mutableStateOf<LlmBenchmark.Report?>(null)
     private var showBenchDialog = mutableStateOf(false)
     var showVoiceSelector = mutableStateOf(false)
-    var selectedVoiceId = mutableStateOf("de_DE-kerstin-low")
+    var selectedVoiceId = mutableStateOf("en_US-amy-medium")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // This is a hands-free live conversation screen. Keep the display awake
@@ -179,8 +179,7 @@ class MainActivity : ComponentActivity() {
         sisaVoice = SisaVoiceService(this, androidTts)
         sisaVoice.initAsync { }
 
-        // STT-Engine: fest Gemma E2B Direct Audio (Whisper entfernt).
-        // AndroidSttManager nur als optionaler Fallback bereitgestellt (ohne Endlos-Spin)
+        // Gemma E2B handles direct audio. Android STT remains an optional fallback.
         sttManager = AndroidSttManager(
             context = this,
             onResult = { text ->
@@ -208,8 +207,8 @@ class MainActivity : ComponentActivity() {
 
         localGemma = LocalGemmaAssistant(this)
         val voicePrefs = getPreferences(MODE_PRIVATE)
-        val savedVoiceId = voicePrefs.getString("selected_voice_id", "de_DE-kerstin-low")
-            ?: "de_DE-kerstin-low"
+        val savedVoiceId = voicePrefs.getString("selected_voice_id", "en_US-amy-medium")
+            ?: "en_US-amy-medium"
         selectedVoiceId.value = savedVoiceId
         localGemma.currentLanguage = if (savedVoiceId.startsWith("de_")) "de" else "en"
         liveState.value = LiveState.LOADING
@@ -612,7 +611,7 @@ class MainActivity : ComponentActivity() {
             .find(raw)?.groupValues?.getOrNull(1)?.trim().orEmpty()
         val transcript = if (isPromptLeak(rawTranscript)) {
             Log.w("LiveMode", "Discarded prompt text incorrectly returned as audio transcript")
-            "[unverständlich]"
+            "[unclear]"
         } else {
             rawTranscript
         }

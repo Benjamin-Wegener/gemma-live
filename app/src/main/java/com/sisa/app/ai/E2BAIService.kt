@@ -45,7 +45,7 @@ class E2BAIService {
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
-                        put("content", "Du bist Gemma, eine freundliche, hilfsbereite deutsche KI im schnellen Live-Sprachmodus. Antworte immer kurz, prägnant und direkt in 1 bis maximal 2 Sätzen ohne Denkprozess.")
+                        put("content", "You are Gemma, a friendly, helpful AI in fast live voice mode. Always answer in English, briefly and directly in one or two sentences, without revealing chain-of-thought.")
                     })
                     put(JSONObject().apply {
                         put("role", "user")
@@ -125,10 +125,10 @@ class E2BAIService {
                 onChunkReady(remaining)
             }
 
-            fullAccumulator.toString().trim().ifEmpty { "Ich habe dich verstanden." }
+            fullAccumulator.toString().trim().ifEmpty { "I understood you." }
         } catch (e: Exception) {
             Log.e("E2BAIService", "Streaming failed", e)
-            val fallback = "Ich habe dich verstanden: $userUtterance"
+            val fallback = "I understood you: $userUtterance"
             onChunkReady(fallback)
             fallback
         }
