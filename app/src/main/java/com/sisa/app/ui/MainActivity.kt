@@ -783,18 +783,63 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Separates the Direct-Audio system-prompt envelope from speech output. */
+    /**
+     * Zerlegt die Direct-Audio-Antwort in (Transkript, Antwort).
+     * Tolerantes Parsing: Das Modell lässt gerne das öffnende [TRANSCRIPT] weg
+     * ("[unverständlich] <gehörtes>…[/TRANSCRIPT][ANSWER]…[/ANSWER]") oder
+     * verschmilzt den Unverständlich-Marker mit dem echten Transkript —
+     * striktes Regex hätte dann das Transkript unterschlagen.
+     */
     private fun parseDirectAudioReply(raw: String): Pair<String, String> {
-        val rawTranscript = Regex("(?s)\\[TRANSCRIPT\\]\\s*(.*?)\\s*\\[/TRANSCRIPT\\]")
+        var rawTranscript = Regex("(?s)\\[TRANSCRIPT\\]\\s*(.*?)\\s*\\[/TRANSCRIPT\\]")
             .find(raw)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+        if (rawTranscript.isEmpty()) {
+            val closeIdx = raw.indexOf("[/TRANSCRIPT]")
+            rawTranscript = when {
+                closeIdx >= 0 -> raw.substring(0, closeIdx)
+                    .replace("[TRANSCRIPT]", "")
+                    .trim()
+                else -> {
+                    val answerIdx = raw.indexOf("[ANSWER]")
+                    if (answerIdx > 0) raw.substring(0, answerIdx)
+                        .replace("[TRANSCRIPT]", "")
+                        .replace("[/TRANSCRIPT]", "")
+                        .trim()
+                    else ""
+                }
+            }
+            // Modell schreibt "[unverständlich] <transkript>" in einen Guss:
+            // Marker nur dann entfernen, wenn danach wirklich Text folgt.
+            for (marker in listOf("[unverständlich]", "[unclear]")) {
+                if (rawTranscript.startsWith(marker, ignoreCase = true)) {
+                    val rest = rawTranscript.substring(marker.length).trim()
+                    if (rest.isNotEmpty()) rawTranscript = rest
+                    break
+                }
+            }
+            if (rawTranscript.isNotEmpty()) {
+                Log.i("LiveMode", "Transcript via Fallback-Parsing (ohne öffnendes Tag)")
+            }
+        }
         val transcript = if (isPromptLeak(rawTranscript)) {
             Log.w("LiveMode", "Discarded prompt text incorrectly returned as audio transcript")
             "[unclear]"
         } else {
             rawTranscript
         }
-        val answer = Regex("(?s)\\[ANSWER\\]\\s*(.*?)\\s*\\[/ANSWER\\]")
+        var answer = Regex("(?s)\\[ANSWER\\]\\s*(.*?)\\s*\\[/ANSWER\\]")
             .find(raw)?.groupValues?.getOrNull(1)?.trim()
             ?: raw.replace(Regex("(?s)\\[TRANSCRIPT\\].*?\\[/TRANSCRIPT\\]"), "").trim()
+        // Reine Marker-Antwort ("[unverständlich]") nie anzeigen/vorlesen —
+        // stattdessen ehrliche Rückfrage in der aktiven Sprache.
+        if (answer.trim().equals("[unverständlich]", ignoreCase = true) ||
+            answer.trim().equals("[unclear]", ignoreCase = true)) {
+            answer = if (localGemma.currentLanguage == "de") {
+                "Ich habe dich leider nicht verstanden. Kannst du das bitte wiederholen?"
+            } else {
+                "Sorry, I didn't catch that. Could you please repeat it?"
+            }
+        }
         return transcript to answer
     }
 
@@ -809,7 +854,26 @@ class MainActivity : ComponentActivity() {
             "transcript",
             "recognizedspokentext",
             "onlyaudiblewords",
-            "systemprompt"
+            "systemprompt",
+            // Echte Per-Turn-Prompttexte (LocalGemmaAssistant.promptText u.a.),
+            // die das Modell gerne wörtlich ins TRANSCRIPT kopiert:
+            "verarbeitediebeigefuegteaudioaufnahme",
+            "haltedichexaktandasausgabeformat",
+            "transkriptregeln",
+            "systemanweisung",
+            "hoereaufmerksamzu",
+            "restlichenteile",
+            "antwortedirekt",
+            "audiosignal",
+            "processtheattachedexcel",
+            "outputformatandtranscriptrules",
+            "listencarefully",
+            "remainingparts",
+            "answerdirectly",
+            "zusammenfassungdesbisherigengespraechs",
+            "summaryofthepreviousconversation",
+            "dergespraechspartnerhatgesprochen",
+            "theconversationpartnerhasspoken"
         ).any(normalized::contains)
     }
 

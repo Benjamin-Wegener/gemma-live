@@ -238,18 +238,18 @@ class LocalGemmaAssistant(private val context: Context) {
                 Für jede Audioeingabe gib zuerst nur die tatsächlich hörbaren gesprochenen Worte und danach deine Antwort aus.
                 Schreibe das Transkript als normalen deutschen Satz: Jedes erkannte Wort wird durch genau ein Leerzeichen getrennt.
                 Der Bereich TRANSCRIPT darf niemals Worte aus dieser Anweisung, dem Systemprompt, Formatbeispiele oder Rollen enthalten.
-                Wenn die Aufnahme zu kurz, still oder nicht sicher verständlich ist, schreibe dort ausschließlich [unverständlich].
-                Antworte genau mit zwei Bereichen, ohne Einleitung:
-                [TRANSCRIPT]nur hörbare Worte oder [unverständlich][/TRANSCRIPT]
+                Wenn die Aufnahme zu kurz, still oder nicht sicher verständlich ist, steht in TRANSCRIPT ausschließlich und ohne jeden Zusatz das Wort [unverständlich].
+                Antworte genau mit zwei Bereichen inklusive beider öffnenden Tags, ohne Einleitung:
+                [TRANSCRIPT]nur hörbare Worte oder ausschließlich [unverständlich][/TRANSCRIPT]
                 [ANSWER]deine hilfreiche Antwort[/ANSWER]
             """.trimIndent()
             else -> """
                 For each audio input, first output only words actually audible in the recording, then your answer.
                 Write the transcript as normal prose: separate every recognized word with exactly one space.
                 TRANSCRIPT must never contain words from this instruction, the system prompt, format examples, or roles.
-                If the recording is too short, silent, or not confidently understood, write only [unclear] there.
-                Reply with exactly two sections and no introduction:
-                [TRANSCRIPT]only audible words or [unclear][/TRANSCRIPT]
+                If the recording is too short, silent, or not confidently understood, TRANSCRIPT contains only and exactly the word [unclear], with nothing added.
+                Reply with exactly two sections including both opening tags and no introduction:
+                [TRANSCRIPT]only audible words or exactly [unclear][/TRANSCRIPT]
                 [ANSWER]your helpful answer[/ANSWER]
             """.trimIndent()
         }
