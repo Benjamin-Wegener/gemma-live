@@ -225,7 +225,23 @@ class LocalGemmaAssistant(private val context: Context) {
         e: Engine,
         compactedContext: String = ""
     ): com.google.ai.edge.litertlm.Conversation {
-        val systemPrompt = getSystemPrompt(currentLanguage)
+        val transcriptInstruction = when (currentLanguage) {
+            "de" -> """
+                Bei jeder Audioeingabe gib zuerst exakt das Erkannte und danach deine Antwort aus.
+                Verwende ausschließlich dieses Format:
+                [TRANSCRIPT]erkannter gesprochener Text[/TRANSCRIPT]
+                [ANSWER]deine hilfreiche Antwort[/ANSWER]
+                Wenn du nichts sicher verstehst, schreibe in TRANSCRIPT: [unverständlich].
+            """.trimIndent()
+            else -> """
+                For every audio input, output the exact recognized speech before your answer.
+                Use only this format:
+                [TRANSCRIPT]recognized spoken text[/TRANSCRIPT]
+                [ANSWER]your helpful answer[/ANSWER]
+                If the speech is unclear, write [unclear] in TRANSCRIPT.
+            """.trimIndent()
+        }
+        val systemPrompt = "${getSystemPrompt(currentLanguage)}\n\n$transcriptInstruction"
         val instruction = if (compactedContext.isBlank()) {
             systemPrompt
         } else {

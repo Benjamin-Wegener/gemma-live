@@ -18,6 +18,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
@@ -55,6 +57,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 enum class LiveState {
     LOADING, IDLE, LISTENING, THINKING, SPEAKING
 }
+
+data class ChatBubbleMessage(val text: String, val fromUser: Boolean)
 
 class MainActivity : ComponentActivity() {
 
@@ -144,6 +148,7 @@ class MainActivity : ComponentActivity() {
     private var liveState = mutableStateOf(LiveState.IDLE)
     private var currentTranscript = mutableStateOf("")
     private var lastAiResponse = mutableStateOf("")
+    private val chatMessages = mutableStateListOf<ChatBubbleMessage>()
     private var volumeLevel = mutableFloatStateOf(0f)
     private var isHandsFreeActive = mutableStateOf(false)
     private var isEngineReady = mutableStateOf(false)
@@ -409,6 +414,7 @@ class MainActivity : ComponentActivity() {
                 liveState = liveState.value,
                 transcript = currentTranscript.value,
                 aiResponse = lastAiResponse.value,
+                chatMessages = chatMessages,
                 volumeLevel = volumeLevel.floatValue,
                 engineReady = isEngineReady.value,
                 engineStatus = engineStatus.value,
@@ -534,6 +540,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleUserSpeechFinished(utterance: String) {
+        chatMessages.add(ChatBubbleMessage(utterance, fromUser = true))
         liveState.value = LiveState.THINKING
         scope.launch {
             speechMutex.lock()
@@ -570,6 +577,7 @@ class MainActivity : ComponentActivity() {
                     val fullResponse = localGemma.streamChatResponse(utterance, onChunkReceived)
                     if (fullResponse.isNotBlank()) {
                         lastAiResponse.value = fullResponse
+                        chatMessages.add(ChatBubbleMessage(fullResponse, fromUser = false))
                     } else {
                         android.util.Log.w("LiveMode", "LocalGemma returned empty response, checking fallback")
                     }
@@ -580,6 +588,7 @@ class MainActivity : ComponentActivity() {
                     )
                     val fullResponse = aiService.streamChatResponse(utterance, onChunkReceived)
                     lastAiResponse.value = fullResponse
+                    chatMessages.add(ChatBubbleMessage(fullResponse, fromUser = false))
                 } else {
                     android.util.Log.e("LiveMode", "LocalGemma nicht verfügbar und kein Fallback aktiv.")
                     liveState.value = LiveState.IDLE
@@ -589,6 +598,16 @@ class MainActivity : ComponentActivity() {
                 speechMutex.unlock()
             }
         }
+    }
+
+    /** Separates the Direct-Audio system-prompt envelope from speech output. */
+    private fun parseDirectAudioReply(raw: String): Pair<String, String> {
+        val transcript = Regex("(?s)\\[TRANSCRIPT\\]\\s*(.*?)\\s*\\[/TRANSCRIPT\\]")
+            .find(raw)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+        val answer = Regex("(?s)\\[ANSWER\\]\\s*(.*?)\\s*\\[/ANSWER\\]")
+            .find(raw)?.groupValues?.getOrNull(1)?.trim()
+            ?: raw.replace(Regex("(?s)\\[TRANSCRIPT\\].*?\\[/TRANSCRIPT\\]"), "").trim()
+        return transcript to answer
     }
 
     private fun interruptAiSpeech() {
@@ -793,19 +812,27 @@ class MainActivity : ComponentActivity() {
                                                 Log.i("LiveMode", "Gemma E2B Direct Audio Processing started (${samplesToUse.size} samples)")
                                                 val onChunkReceived: (String) -> Unit = { chunk ->
                                                     scope.launch(Dispatchers.Main) {
-                                                        lastAiResponse.value = "${lastAiResponse.value} $chunk".trim()
+                                                        // The final parsed message is rendered below; do not expose
+                                                        // system-prompt envelope fragments while streaming.
+                                                        lastAiResponse.value = "Recognizing speech…"
                                                     }
                                                 }
-                                                val resp = localGemma.processAudioDirectly(samplesToUse, onChunkReceived)
+                                                val rawResponse = localGemma.processAudioDirectly(samplesToUse, onChunkReceived)
+                                                val (recognizedText, responseText) = parseDirectAudioReply(rawResponse)
                                                 scope.launch(Dispatchers.Main) {
-                                                    if (resp.isBlank()) {
+                                                    if (responseText.isBlank()) {
                                                         Log.w("LiveMode", "Gemma returned an empty direct-audio response")
                                                         liveState.value = LiveState.IDLE
                                                     } else {
-                                                        lastAiResponse.value = resp
+                                                        if (recognizedText.isNotBlank()) {
+                                                            currentTranscript.value = recognizedText
+                                                            chatMessages.add(ChatBubbleMessage(recognizedText, fromUser = true))
+                                                        }
+                                                        lastAiResponse.value = responseText
+                                                        chatMessages.add(ChatBubbleMessage(responseText, fromUser = false))
                                                         liveState.value = LiveState.SPEAKING
                                                         aiSpeakStartNs = SystemClock.elapsedRealtimeNanos()
-                                                        sisaVoice.speak(resp) {
+                                                        sisaVoice.speak(responseText) {
                                                             if (isHandsFreeActive.value) {
                                                                 liveState.value = LiveState.LISTENING
                                                             } else {
@@ -924,6 +951,7 @@ fun LiveModeScreen(
     liveState: LiveState,
     transcript: String,
     aiResponse: String,
+    chatMessages: List<ChatBubbleMessage> = emptyList(),
     volumeLevel: Float,
     engineReady: Boolean = true,
     engineStatus: String = "",
@@ -1181,42 +1209,32 @@ fun LiveModeScreen(
                 }
             }
 
-            // Dialog-Karten (Transkription & Antwort)
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            // Conversation bubbles: user right, Gemma left, like a messaging app.
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 8.dp)
             ) {
-                // Was der Nutzer gesagt hat
-                if (transcript.isNotBlank()) {
-                    Card(
+                items(chatMessages) { message ->
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(12.dp)
+                        horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start
                     ) {
-                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text("You:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                Text(transcript, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            }
-                        }
-                    }
-                }
-
-                // Was die KI antwortet
-                if (aiResponse.isNotBlank()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
-                            Icon(Icons.Default.SmartToy, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text("Gemma:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                Text(aiResponse, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Card(
+                            modifier = Modifier.widthIn(max = 310.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (message.fromUser) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text(
+                                    if (message.fromUser) "You" else "Gemma",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(message.text, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
