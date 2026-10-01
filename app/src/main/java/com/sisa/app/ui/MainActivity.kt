@@ -206,8 +206,10 @@ class MainActivity : ComponentActivity() {
         isHandsFreeActive.value = false
         engineStatus.value = "Loading engine …"
         scope.launch(Dispatchers.Default) {
+            var downloadedGemmaThisLaunch = false
             // Auto-download Gemma model if not found (with progress, resume, retry)
             if (!com.sisa.app.download.AppModelManager.isPrivateModelInstalled(this@MainActivity, com.sisa.app.download.AppModelManager.GEMMA_FILE)) {
+                downloadedGemmaThisLaunch = true
                 modelDownloadProgress.floatValue = 0f
                 engineStatus.value = "Checking Download/models for Gemma…"
                 android.util.Log.i("LiveMode", "Checking Download/models before network download")
@@ -225,15 +227,23 @@ class MainActivity : ComponentActivity() {
                             if (progress.isCompleted) {
                                 android.util.Log.i("LiveMode", "Gemma model download completed")
                                 downloadSuccess = true
+                                withContext(Dispatchers.Main) {
+                                    // 100% is reserved for a model that is actually usable.
+                                    modelDownloadProgress.floatValue = 0.99f
+                                    engineStatus.value = "Starting Gemma model… 99%"
+                                }
                             } else if (progress.error != null) {
                                 android.util.Log.e("LiveMode", "Gemma model download error: ${progress.error}")
                             } else {
-                                val percent = (progress.progressPercent * 100).toInt()
+                                // Keep the final 1% for SHA-256 verification and model load.
+                                val fraction = progress.progressPercent.coerceAtMost(0.99f)
+                                val percent = (fraction * 100).toInt()
                                 val mb = progress.bytesDownloaded / (1024 * 1024)
                                 val totalMb = progress.totalBytes / (1024 * 1024)
                                 withContext(Dispatchers.Main) {
-                                    modelDownloadProgress.floatValue = progress.progressPercent
-                                    engineStatus.value = "Downloading Gemma model… $percent% ($mb/$totalMb MB)"
+                                    modelDownloadProgress.floatValue = fraction
+                                    val phase = if (progress.progressPercent >= 1f) "Verifying Gemma model" else "Downloading Gemma model"
+                                    engineStatus.value = "$phase… $percent% ($mb/$totalMb MB)"
                                 }
                             }
                         }
@@ -258,6 +268,11 @@ class MainActivity : ComponentActivity() {
             withContext(Dispatchers.Main) {
                 if (loadInfo != null) {
                     android.util.Log.i("LiveMode", "LocalGemma ready: ${loadInfo.backend.label}, ${loadInfo.modelFile}")
+                    if (downloadedGemmaThisLaunch) {
+                        modelDownloadProgress.floatValue = 1f
+                        engineStatus.value = "Gemma model ready… 100%"
+                        kotlinx.coroutines.delay(250)
+                    }
                     isEngineReady.value = true
                     engineStatus.value = "Ready (${loadInfo.backend.label})"
                     // Auto-start hands-free once engine is loaded
