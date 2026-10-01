@@ -322,7 +322,7 @@ class LocalGemmaAssistant(private val context: Context) {
             return@withContext ""
         }
 
-        mutex.withLock {
+        val directAudioResult: Result<String> = mutex.withLock {
             try {
                 var conv = activeConversation ?: createDirectAudioConversation(e)
                 activeConversation = conv
@@ -423,18 +423,22 @@ class LocalGemmaAssistant(private val context: Context) {
                         conversationHistory.add(DialogTurn("assistant", reply))
                     }
                 }
-                reply
+                Result.success(reply)
             } catch (t: Throwable) {
                 Log.e(TAG, "Gemma E2B Direct Audio processing failed, resetting conversation and falling back", t)
                 runCatching { activeConversation?.close() }
                 activeConversation = null
                 wavFiles.forEach { runCatching { it.delete() } }
-                val fallbackPrompt = when (currentLanguage) {
-                    "de" -> "Der Gesprächspartner hat gesprochen (${"%.1f".format(audioDurationSec)}s). Antworte freundlich auf Deutsch:"
-                    else -> "The conversation partner has spoken (${"%.1f".format(audioDurationSec)}s). Respond friendly in English:"
-                }
-                streamChatResponse(fallbackPrompt, onChunk)
+                Result.failure(t)
             }
+        }
+
+        directAudioResult.getOrElse {
+            val fallbackPrompt = when (currentLanguage) {
+                "de" -> "Der Gesprächspartner hat gesprochen (${"%.1f".format(audioDurationSec)}s). Antworte freundlich auf Deutsch:"
+                else -> "The conversation partner has spoken (${"%.1f".format(audioDurationSec)}s). Respond friendly in English:"
+            }
+            streamChatResponse(fallbackPrompt, onChunk)
         }
     }
 
@@ -478,14 +482,14 @@ class LocalGemmaAssistant(private val context: Context) {
                         BackendKind.CPU -> Backend.CPU()
                         else -> Backend.GPU()
                     }
+                    val isMultimodal = (modelFile.name == MODEL_FILE_MULTIMODAL)
                     val cfg = EngineConfig(
                         modelPath = modelFile.absolutePath,
                         backend = backend,
-                        // Kol-Hinweis (benjamin-wegener/kol): Audio-Encoder läuft auf CPU,
-                        // auch wenn Text auf GPU liegt. Mit GPU-Audio wird
-                        // TF_LITE_AUDIO_ENCODER_HW wegen Backend-Constraints geskippt
-                        // und InputData.Audio hinkt ewig (kein Callback).
-                        audioBackend = Backend.CPU(),
+                        // The multimodal model needs a CPU audio encoder.  The
+                        // text-only GPU fallback must not request one: it has
+                        // no audio graph and otherwise fails session creation.
+                        audioBackend = if (isMultimodal) Backend.CPU() else null,
                         maxNumTokens = MAX_NUM_TOKENS
                     )
                     val e = Engine(cfg)
