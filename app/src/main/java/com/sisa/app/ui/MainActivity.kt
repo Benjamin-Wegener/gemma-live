@@ -264,7 +264,23 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+            // LiteRT exposes no sub-step callbacks while the engine maps and
+            // prepares the model. Reserve the last percent for that phase and
+            // advance it monotonically until the real ready signal arrives.
+            val engineProgressJob = if (downloadedGemmaThisLaunch) {
+                scope.launch {
+                    modelDownloadProgress.floatValue = 0.99f
+                    engineStatus.value = "Loading Gemma engine… 99.0%"
+                    while (isActive) {
+                        kotlinx.coroutines.delay(300)
+                        val next = (modelDownloadProgress.floatValue + 0.001f).coerceAtMost(0.999f)
+                        modelDownloadProgress.floatValue = next
+                        engineStatus.value = "Loading Gemma engine… ${"%.1f".format(next * 100)}%"
+                    }
+                }
+            } else null
             val loadInfo = localGemma.load()
+            engineProgressJob?.cancel()
             withContext(Dispatchers.Main) {
                 if (loadInfo != null) {
                     android.util.Log.i("LiveMode", "LocalGemma ready: ${loadInfo.backend.label}, ${loadInfo.modelFile}")
