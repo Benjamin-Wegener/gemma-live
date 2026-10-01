@@ -47,7 +47,7 @@ class PlaybackCaptureSource(
         // Einziger Builder (API 29-34): braucht das MediaProjection-Token.
         // Usage-Match statt UID-Match: Google-TTS rendert ggf. im Engine-Prozess
         // (fremde UID); USAGE_MEDIA trifft die Companion-Wiedergabe zuverlässig.
-        // Sisas eigene Stimme (USAGE_ASSISTANT) bleibt ausgeschlossen.
+        // Gemmas eigene Stimme (USAGE_ASSISTANT) bleibt ausgeschlossen.
         val captureConfig = AudioPlaybackCaptureConfiguration.Builder(projection)
             .addMatchingUsage(android.media.AudioAttributes.USAGE_MEDIA)
             .build()
@@ -75,7 +75,7 @@ class PlaybackCaptureSource(
         }
         record.startRecording()
         audioRecord = record
-        Log.i("SisaVoice", "PlaybackCaptureSource aktiv (uid=$uid pkg=$targetPackage)")
+        Log.i("GemmaVoice", "PlaybackCaptureSource aktiv (uid=$uid pkg=$targetPackage)")
     }
 
     private fun companionUid(): Int {

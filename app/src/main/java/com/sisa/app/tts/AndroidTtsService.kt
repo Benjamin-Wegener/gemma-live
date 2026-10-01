@@ -77,7 +77,7 @@ class AndroidTtsService(private val context: Context) : TextToSpeech.OnInitListe
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(
                     context,
-                    "Bitte Lautstärke erhöhen \u2013 sonst bleibt Sisa stumm.",
+                    "Bitte Lautstärke erhöhen \u2013 sonst bleibt Gemma stumm.",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -93,7 +93,7 @@ class AndroidTtsService(private val context: Context) : TextToSpeech.OnInitListe
         }
         if (isInitialized) {
             synchronized(lock) { pendingDone = onDone }
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "SIS_TTS_${System.currentTimeMillis()}")
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "GEMMA_TTS_${System.currentTimeMillis()}")
         } else {
             onDone()
         }

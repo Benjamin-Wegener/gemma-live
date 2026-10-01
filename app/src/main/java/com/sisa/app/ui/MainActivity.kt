@@ -52,7 +52,6 @@ import com.sisa.app.ai.TurnDetector
 import com.sisa.app.stt.AndroidSttManager
 import com.sisa.app.tts.AndroidTtsService
 import com.sisa.app.tts.GemmaVoiceService
-import com.sisa.app.tts.SisaVoiceService
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -67,7 +66,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var androidTts: AndroidTtsService
     private lateinit var voiceService: com.sisa.app.tts.GemmaVoiceService
-    private val sisaVoice get() = voiceService
+    private val gemmaVoice get() = voiceService
     private var sttManager: AndroidSttManager? = null
     private val speechBuffer = java.io.ByteArrayOutputStream()
     private val speechBufferLock = Any()
@@ -675,7 +674,7 @@ class MainActivity : ComponentActivity() {
                         lastAiResponse.value = text
                         liveState.value = LiveState.SPEAKING
                         aiSpeakStartNs = android.os.SystemClock.elapsedRealtimeNanos()
-                        sisaVoice.speak(text) {
+                        gemmaVoice.speak(text) {
                             if (isHandsFreeActive.value) {
                                 liveState.value = LiveState.LISTENING
                             } else {
@@ -735,7 +734,7 @@ class MainActivity : ComponentActivity() {
                         liveState.value = LiveState.SPEAKING
                         lastAiResponse.value = chunk
                         aiSpeakStartNs = android.os.SystemClock.elapsedRealtimeNanos()
-                        sisaVoice.speak(chunk) {
+                        gemmaVoice.speak(chunk) {
                             if (isHandsFreeActive.value) {
                                 liveState.value = LiveState.LISTENING
                             } else {
@@ -745,7 +744,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         lastAiResponse.value = "${lastAiResponse.value} $chunk"
                         aiSpeakStartNs = android.os.SystemClock.elapsedRealtimeNanos()
-                        sisaVoice.speak(chunk) {
+                        gemmaVoice.speak(chunk) {
                             if (isHandsFreeActive.value) {
                                 liveState.value = LiveState.LISTENING
                             } else {
@@ -817,7 +816,7 @@ class MainActivity : ComponentActivity() {
     private fun interruptAiSpeech() {
         if (liveState.value == LiveState.SPEAKING) {
             android.util.Log.i("BENCH", "BENCH barge_flush t_elapsed_ns=${android.os.SystemClock.elapsedRealtimeNanos()} reason=barge_in")
-            sisaVoice.stop(reason = "barge_in")
+            gemmaVoice.stop(reason = "barge_in")
             turnDetector?.reset()
             // Mic lief weiter — Puffer für Nutzer-Einwurf frisch starten
             synchronized(speechBufferLock) { speechBuffer.reset() }
@@ -849,7 +848,7 @@ class MainActivity : ComponentActivity() {
             isHandsFreeActive.value = false
             stopContinuousAudioLoop()
             sttManager?.stopListening()
-            sisaVoice.stop()
+            gemmaVoice.stop()
             liveState.value = LiveState.IDLE
         }
     }
@@ -902,7 +901,7 @@ class MainActivity : ComponentActivity() {
                         when (event) {
                             is TurnDetector.Event.SpeechStarted -> {
                                 val nowNs = android.os.SystemClock.elapsedRealtimeNanos()
-                                val aiSpeaking = sisaVoice.isSpeaking || liveState.value == LiveState.SPEAKING
+                                val aiSpeaking = gemmaVoice.isSpeaking || liveState.value == LiveState.SPEAKING
                                 segmentHadAiAudio = aiSpeaking
                                 segmentBargeInAccepted = false
                                 segmentPeak = frame.peak
@@ -912,9 +911,9 @@ class MainActivity : ComponentActivity() {
                                     val elapsedMs = (nowNs - aiSpeakStartNs) / 1_000_000L
                                     val loudEnough = frame.peak >= BARGE_MIN_PEAK || frame.rmsDb >= BARGE_MIN_RMS_DB
                                     // Audio ist physisch vorbei, aber isSpeaking hält das Nachhall-Fenster
-                                    // (sisaVoice.ECHO_TAIL_MS) offen. Hier ist die 900ms-Anlaufzeit
+                                    // (gemmaVoice.ECHO_TAIL_MS) offen. Hier ist die 900ms-Anlaufzeit
                                     // nicht mehr relevant — entscheidet nur noch die Lautstärke.
-                                    val tailMs = if (sisaVoice.audioEndedNs > 0L) (nowNs - sisaVoice.audioEndedNs) / 1_000_000L else Long.MAX_VALUE
+                                    val tailMs = if (gemmaVoice.audioEndedNs > 0L) (nowNs - gemmaVoice.audioEndedNs) / 1_000_000L else Long.MAX_VALUE
                                     val inEchoTail = tailMs < GemmaVoiceService.ECHO_TAIL_MS
                                     if (inEchoTail && loudEnough) {
                                         android.util.Log.i("LiveMode", "VAD SpeechStarted = Nutzer direkt nach Antwortende (${tailMs}ms nach Audioende, peak=${frame.peak})")
@@ -972,10 +971,10 @@ class MainActivity : ComponentActivity() {
                                 // true (chunk_switch), liveState kann schon LISTENING sein, und der VAD
                                 // meldet wegen Nachhall gern ~300ms nach Audioende noch "Sprache".
                                 // Ausnahme: angenommener Barge-In ist echter Nutzer-Turn.
-                                val aiAudioInSegment = segmentHadAiAudio || sisaVoice.isSpeaking
+                                val aiAudioInSegment = segmentHadAiAudio || gemmaVoice.isSpeaking
                                 val aiState = liveState.value == LiveState.SPEAKING || liveState.value == LiveState.LISTENING
                                 if (aiAudioInSegment && !segmentBargeInAccepted && aiState) {
-                                    android.util.Log.i("BENCH", "BENCH echo_drop t_elapsed_ns=${android.os.SystemClock.elapsedRealtimeNanos()} durationMs=${event.speechDurationMs} startedDuringAi=${segmentHadAiAudio} stillSpeaking=${sisaVoice.isSpeaking} peak=$segmentPeak rmsDb=$segmentRmsDb")
+                                    android.util.Log.i("BENCH", "BENCH echo_drop t_elapsed_ns=${android.os.SystemClock.elapsedRealtimeNanos()} durationMs=${event.speechDurationMs} startedDuringAi=${segmentHadAiAudio} stillSpeaking=${gemmaVoice.isSpeaking} peak=$segmentPeak rmsDb=$segmentRmsDb")
                                     synchronized(speechBufferLock) { speechBuffer.reset() }
                                     // VAD-Segment verwerfen, kein Whisper-Call
                                 } else {
@@ -1057,7 +1056,7 @@ class MainActivity : ComponentActivity() {
                                                         chatMessages.add(ChatBubbleMessage(responseText, fromUser = false))
                                                         liveState.value = LiveState.SPEAKING
                                                         aiSpeakStartNs = SystemClock.elapsedRealtimeNanos()
-                                                        sisaVoice.speak(responseText) {
+                                                        gemmaVoice.speak(responseText) {
                                                             if (isHandsFreeActive.value) {
                                                                 liveState.value = LiveState.LISTENING
                                                             } else {
@@ -1175,7 +1174,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
-        sisaVoice.shutdown()
+        gemmaVoice.shutdown()
         androidTts.shutdown()
         sttManager?.destroy()
     }
@@ -1276,23 +1275,34 @@ fun LiveModeScreen(
 
                     Text(
                         text = """
-• Google Gemma & LiteRT-LM
-  Copyright Google LLC. Apache License 2.0 / Gemma Terms of Use.
+• Google Gemma 4 E2B (model weights)
+  Copyright Google LLC. Use under the Gemma Terms of Use
+  (separate from Apache 2.0; acceptance required to download).
 
-• Sherpa-ONNX & Next-gen Kaldi
+• LiteRT-LM 0.17.1 (on-device inference runtime)
+  Copyright Google LLC. Apache License 2.0.
+
+• Sherpa-ONNX 1.13.8 & Next-gen Kaldi
   Copyright (c) 2022-2024 Xiaomi Corporation. Apache License 2.0.
 
-• Piper TTS & Thorsten Voice
-  Copyright (c) Michael Hansen, Thorsten Müller. MIT / CC0 / Open Audio License.
+• Piper TTS voices (downloaded at runtime, not bundled)
+  Originals: Copyright (c) Michael Hansen (MIT); voice data
+  per-voice CC0 / Open Audio License. Mirrors via Hugging Face.
 
-• Silero VAD
+• espeak-ng-data (bundled phoneme data)
+  Copyright the espeak-ng contributors. GPL-3.0-or-later —
+  see NOTICE for distributor obligations.
+
+• Silero VAD (bundled model)
   Copyright (c) Silero Team. MIT License.
 
-• AndroidX & Jetpack Compose
+• AndroidX, Jetpack Compose & Material
   Copyright The Android Open Source Project. Apache License 2.0.
 
-• Kotlin Coroutines
-  Copyright 2000-2024 JetBrains s.r.o. Apache License 2.0.
+• Kotlin & Coroutines / OkHttp / Gson
+  Copyright JetBrains / Square / Google. Apache License 2.0.
+
+Full inventory: NOTICE file in the repository.
                         """.trimIndent(),
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant

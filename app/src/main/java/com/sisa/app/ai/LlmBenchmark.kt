@@ -73,7 +73,7 @@ object LlmBenchmark {
 
         fun toShareText(): String {
             val sb = StringBuilder()
-            sb.appendLine("=== SIS / Gemma-Live LLM Benchmark ===")
+            sb.appendLine("=== Gemma-Live LLM Benchmark ===")
             sb.appendLine("Modell: $modelFile (%.1f MB)".format(modelSizeMb))
             sb.appendLine("LiteRT-LM: $litertVersion (present=$litertPresent)")
             sb.appendLine("--------------------------------------")

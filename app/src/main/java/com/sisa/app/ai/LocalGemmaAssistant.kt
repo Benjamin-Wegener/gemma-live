@@ -57,11 +57,11 @@ import java.util.zip.CRC32
  *    com.google.ai.edge.litertlm:litert-lm-android:0.17.1)
  *  - Modell gemma-4-E2B-it-gpu.litertlm (litert-community, QAT-Int4, 1,87 GB,
  *    CRC32 0x0f55d747) im privaten App-Speicher (AppModelManager.getModelsDir).
- *    Import per USB:
- *      adb -d push models/gemma-4-E2B-it-gpu.litertlm \
- *          /sdcard/Download/SIS_Models/
- *    + In-App-Import via AppModelManager.importFromPublicDownloads
- *      (MediaStore-Scan auf Download/SIS_Models mit CRC-Pflichtpruefung).
+  *    Import per USB:
+  *      adb -d push models/gemma-4-E2B-it-gpu.litertlm \
+  *          /sdcard/Download/models/
+  *    + In-App-Import via AppModelManager.importFromPublicDownloads
+  *      (MediaStore-Scan auf Download/models mit CRC-Pflichtpruefung).
  *
  * BENCH-Events (Paritaet zu E2BAIService, damit tools/bench/metrics.py
  * unveraendert funktioniert):

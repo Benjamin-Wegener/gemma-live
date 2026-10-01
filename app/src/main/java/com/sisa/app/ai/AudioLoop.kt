@@ -199,7 +199,7 @@ class AudioLoop(
     }
 
     companion object {
-        private const val TAG = "SisaVoice"
+        private const val TAG = "GemmaVoice"
         private const val RMS_DB_FLOOR = -120f
     }
 }

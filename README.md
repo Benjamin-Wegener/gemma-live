@@ -51,7 +51,16 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE)
+App code: Apache License 2.0 — see [LICENSE](LICENSE).
+
+Third-party components (runtimes, voices, models, phoneme data) have
+their own licenses — see [NOTICE](NOTICE) for the full audited
+inventory. Two points matter for redistribution:
+
+- **Gemma 4 E2B weights** are downloaded at runtime under the
+  **Gemma Terms of Use** (not Apache 2.0) — never vendored in this repo.
+- **espeak-ng-data** (bundled phoneme data) is **GPL-3.0-or-later**; anyone
+  distributing built APKs must comply with GPL-3.0 for that asset.
 
 ## About
 

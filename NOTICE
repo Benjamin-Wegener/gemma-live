@@ -1,0 +1,88 @@
+Gemma Live — Third-Party Notices
+====================================
+
+This repository's own code is licensed under the Apache License 2.0
+(see LICENSE). The app additionally depends on, bundles, or downloads
+at runtime the third-party components listed below. This file is the
+result of the dependency/asset audit (issue #4) and must be updated
+whenever a dependency, bundled asset, or download source changes.
+
+1. AI model (downloaded at runtime, NOT redistributed in this repo)
+---------------------------------------------------------------------------
+- Google Gemma 4 E2B-IT (`gemma-4-E2B-it.litertlm`, litert-community
+  build on Hugging Face)
+  Copyright: Google LLC
+  License: Gemma Terms of Use (https://ai.google.dev/gemma/terms).
+  NOT Apache 2.0. Downloading/using the weights requires accepting the
+  Gemma Terms. Do not mirror the file publicly without checking those
+  terms; the app downloads it directly from Hugging Face to the device.
+
+2. On-device inference runtime (bundled AAR in app/libs/)
+----------------------------------------------------------
+- LiteRT-LM Android 0.17.1 (`app/libs/litertlm-android-0.17.1.aar`,
+  sourced from Google Maven dl.google.com/dl/android/maven2)
+  Copyright: Google LLC
+  License: Apache License 2.0 (compatible with this repo's license).
+- Gson 2.10.1 (runtime dependency of the LiteRT-LM AAR)
+  Copyright: Google LLC and contributors
+  License: Apache License 2.0.
+
+3. Speech synthesis & voice activity (bundled AAR + assets)
+------------------------------------------------------------
+- sherpa-onnx 1.13.8 (`app/libs/sherpa-onnx-1.13.8.aar`, Next-gen Kaldi
+  / Xiaomi Corporation)
+  Copyright (c) 2022-2024 Xiaomi Corporation
+  License: Apache License 2.0.
+- Silero VAD model (`app/src/main/assets/vad/silero_vad.onnx`, bundled)
+  Copyright (c) Silero Team
+  License: MIT License.
+- espeak-ng-data (`app/src/main/assets/espeak-ng-data/`, bundled, ~355 files)
+  Copyright: the espeak-ng contributors
+  License: GPL-3.0-or-later.
+  NOTE FOR DISTRIBUTORS: this is the only copyleft asset in the APK.
+  Anyone distributing built APKs must comply with GPL-3.0 for this
+  asset (offer/provide corresponding source access for espeak-ng-data
+  and preserve its copyright notices). If strict Apache-2.0-only
+  distribution is required, this asset must be removed or replaced and
+  the Piper/sherpa TTS path re-validated.
+- tokens.txt (`app/src/main/assets/models/tokens.txt`, Piper phoneme map)
+  Part of the Piper voice data (see section 4), permissively licensed.
+
+4. Piper TTS voice models (downloaded at runtime, NOT bundled in the APK)
+--------------------------------------------------------------------------
+Per-language ONNX models fetched on demand from Hugging Face mirrors
+(user `csukuangfj/vits-piper-*`; originals from the Piper TTS project):
+  Copyright: Piper TTS (c) Michael Hansen — MIT License (code);
+  voice datasets under CC0 / Open Audio License (per voice).
+Covered voices: en_US-amy, en_GB-alan, de_DE-kerstin, es_ES-davefx,
+zh_CN-huayan, ru_RU-denis, hi_IN-rohan.
+Because they are downloaded to the device at first use (with SHA-256
+verification), they are not redistributed by this repository. Downloading
+them is subject to Hugging Face Terms plus the per-voice dataset licenses.
+
+5. Android / Kotlin / networking libraries (Maven Central, Apache 2.0)
+-----------------------------------------------------------------------
+All Apache License 2.0, compatible with this repo's license:
+- androidx.core:core-ktx 1.12.0, appcompat 1.6.1
+- Jetpack Compose BOM 2024.01.00 (ui, ui-graphics, material3,
+  material-icons-extended, activity-compose 1.8.2, lifecycle 2.7.0)
+- com.google.android.material:material 1.11.0
+- com.squareup.okhttp3:okhttp / logging-interceptor 4.12.0
+- org.jetbrains.kotlinx:kotlinx-coroutines-{android,core} 1.7.3
+- com.google.code.gson:gson 2.10.1 (see also section 2)
+- junit 4.13.2 / androidx.test (test only)
+
+6. Build tooling
+-----------------
+- Android Gradle Plugin, Kotlin Gradle Plugin, Gradle itself:
+  Apache License 2.0.
+
+Compatibility summary
+----------------------
+- Repository code + Maven/AAR deps: Apache 2.0 throughout — compatible.
+- Gemma weights: proprietary-adjacent Gemma Terms of Use — runtime-only,
+  never vendored here; end users accept the terms when downloading.
+- Piper voices: permissive (MIT/CC0/Open Audio) — runtime-only.
+- espeak-ng-data: GPL-3.0-or-later, BUNDLED — see distributor note above.
+  This is the single known distribution restriction; everything else is
+  permissive and compatible with Apache 2.0 redistribution.

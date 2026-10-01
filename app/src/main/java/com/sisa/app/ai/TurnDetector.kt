@@ -250,6 +250,6 @@ class TurnDetector(
     }
 
     companion object {
-        private const val TAG = "SisaVoice"
+        private const val TAG = "GemmaVoice"
     }
 }

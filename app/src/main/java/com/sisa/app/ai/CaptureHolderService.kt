@@ -32,7 +32,7 @@ class CaptureHolderService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notif = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Sisa Capture bereit")
+            .setContentTitle("Gemma Live Capture bereit")
             .setContentText("In-Emulator-Audiopfad aktiv")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)

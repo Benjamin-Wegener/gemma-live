@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Sisa"
+rootProject.name = "Gemma-Live"
 include(":app")
