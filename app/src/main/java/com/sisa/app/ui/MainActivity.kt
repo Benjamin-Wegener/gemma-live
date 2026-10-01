@@ -148,6 +148,7 @@ class MainActivity : ComponentActivity() {
     private var isHandsFreeActive = mutableStateOf(false)
     private var isEngineReady = mutableStateOf(false)
     private var engineStatus = mutableStateOf("Loading engine …")
+    private var modelDownloadProgress = mutableFloatStateOf(0f)
     private var benchRunning = mutableStateOf(false)
     private var benchStatus = mutableStateOf("")
     private var benchReport = mutableStateOf<LlmBenchmark.Report?>(null)
@@ -207,6 +208,7 @@ class MainActivity : ComponentActivity() {
         scope.launch(Dispatchers.Default) {
             // Auto-download Gemma model if not found (with progress, resume, retry)
             if (!com.sisa.app.download.AppModelManager.isPrivateModelInstalled(this@MainActivity, com.sisa.app.download.AppModelManager.GEMMA_FILE)) {
+                modelDownloadProgress.floatValue = 0f
                 engineStatus.value = "Checking Download/models for Gemma…"
                 android.util.Log.i("LiveMode", "Checking Download/models before network download")
                 var retryCount = 0
@@ -230,6 +232,7 @@ class MainActivity : ComponentActivity() {
                                 val mb = progress.bytesDownloaded / (1024 * 1024)
                                 val totalMb = progress.totalBytes / (1024 * 1024)
                                 withContext(Dispatchers.Main) {
+                                    modelDownloadProgress.floatValue = progress.progressPercent
                                     engineStatus.value = "Downloading Gemma model… $percent% ($mb/$totalMb MB)"
                                 }
                             }
@@ -376,6 +379,7 @@ class MainActivity : ComponentActivity() {
                 volumeLevel = volumeLevel.floatValue,
                 engineReady = isEngineReady.value,
                 engineStatus = engineStatus.value,
+                downloadProgress = modelDownloadProgress.floatValue,
                 showVoiceSelector = voiceSelectorState.value,
                 onShowVoiceSelector = { voiceSelectorState.value = it }
             )
@@ -890,6 +894,7 @@ fun LiveModeScreen(
     volumeLevel: Float,
     engineReady: Boolean = true,
     engineStatus: String = "",
+    downloadProgress: Float = 0f,
     showVoiceSelector: Boolean = false,
     onShowVoiceSelector: (Boolean) -> Unit = {}
 ) {
@@ -903,17 +908,6 @@ fun LiveModeScreen(
         ),
         label = "scale"
     )
-    // Eigener Ladebalken + Spinner (kein Material3-Progress, wegen BOM-Konflikt):
-    val loadingFraction by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "loadingBar"
-    )
-
     val stateColor = when (liveState) {
         LiveState.LOADING -> Color(0xFFF59E0B)     // Amber / Laden
         LiveState.IDLE -> Color(0xFF64748B)
@@ -1059,14 +1053,14 @@ fun LiveModeScreen(
                 )
                 if (liveState == LiveState.LOADING) {
                     Spacer(Modifier.height(8.dp))
-                    // Eigener Ladebalken (Box-basiert, indeterminiert animiert)
+                    // Determinierter Downloadfortschritt: füllt sich nur von links nach rechts.
                     Box(
                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
                             .background(stateColor.copy(alpha = 0.2f))
                     ) {
                         Box(
                             modifier = Modifier.fillMaxHeight()
-                                .fillMaxWidth(loadingFraction)
+                                .fillMaxWidth(downloadProgress.coerceIn(0f, 1f))
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(stateColor)
                         )
