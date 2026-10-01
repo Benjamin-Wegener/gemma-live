@@ -170,6 +170,8 @@ class MainActivity : ComponentActivity() {
     var isVoiceDownloading = mutableStateOf(false)
     var voiceDownloadProgress = mutableFloatStateOf(0f)
     var voiceDownloadError = mutableStateOf<String?>(null)
+    var voiceDownloadingName = mutableStateOf("")
+    var voiceDownloadDetail = mutableStateOf("")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // This is a hands-free live conversation screen. Keep the display awake
@@ -334,12 +336,17 @@ class MainActivity : ComponentActivity() {
         val selectedVoiceState = selectedVoiceId
 
         setContent {
-            // Voice selector dialog
+            // Voice selector dialog (Issue #8: Inline-Fortschritt beim Nachladen)
             if (voiceSelectorState.value) {
                 val voices = com.sisa.app.download.AppModelManager.PIPER_VOICES
                 var selectedId by remember { mutableStateOf(selectedVoiceState.value) }
+                val downloading = isVoiceDownloading.value
+                val voiceProgress = voiceDownloadProgress.floatValue
+                val voiceError = voiceDownloadError.value
+                val voiceDetail = voiceDownloadDetail.value
+                val downloadingName = voiceDownloadingName.value
                 androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { voiceSelectorState.value = false },
+                    onDismissRequest = { if (!downloading) voiceSelectorState.value = false },
                     title = { Text("Select Voice", fontWeight = FontWeight.Bold) },
                     text = {
                         val scrollState = rememberScrollState()
@@ -350,77 +357,132 @@ class MainActivity : ComponentActivity() {
                                 .verticalScroll(scrollState)
                         ) {
                             voices.forEach { voice ->
+                                val installed = remember(voice.modelFile) {
+                                    com.sisa.app.download.AppModelManager.isModelInstalled(
+                                        this@MainActivity, voice.modelFile
+                                    )
+                                }
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { selectedId = voice.id }
+                                        .clickable(enabled = !downloading) { selectedId = voice.id }
                                         .padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     androidx.compose.material3.RadioButton(
                                         selected = selectedId == voice.id,
-                                        onClick = { selectedId = voice.id }
+                                        onClick = { if (!downloading) selectedId = voice.id },
+                                        enabled = !downloading
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text(voice.name, style = MaterialTheme.typography.bodyMedium)
+                                    Column(Modifier.weight(1f)) {
+                                        Text(voice.name, style = MaterialTheme.typography.bodyMedium)
+                                        if (!installed) {
+                                            Text(
+                                                "Not downloaded — tap OK to fetch (~60 MB)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    }
+                                    if (downloading && selectedId == voice.id) {
+                                        Spacer(Modifier.width(8.dp))
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
                                 }
+                            }
+                            // Inline-Download-Fortschritt (Issue #8, Punkte 1–3)
+                            if (downloading) {
+                                Spacer(Modifier.height(12.dp))
+                                val pct = (voiceProgress.coerceIn(0f, 1f) * 100).toInt()
+                                Text(
+                                    "Downloading ${downloadingName.ifBlank { "voice" }}… $pct%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    progress = voiceProgress.coerceIn(0f, 1f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    voiceDetail.ifBlank { "Please keep the app open…" },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            if (voiceError != null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Download failed: $voiceError",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Text(
+                                    "Check connection & retry.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
                         }
                     },
                     confirmButton = {
-                        TextButton(onClick = {
-                            selectedVoiceState.value = selectedId
-                            voiceSelectorState.value = false
-                            prefs.edit().putBoolean("voice_selected", true)
-                                .putString("selected_voice_id", selectedId).apply()
-                            // Set language based on voice selection
-                            val lang = selectedId.substringBefore("_")
-                            localGemma.currentLanguage = lang
-                            voiceService.currentLanguage = lang
-                            androidTts.setLanguage(java.util.Locale.forLanguageTag(lang))
-                            // Download selected voice if needed
-                            scope.launch(Dispatchers.Default) {
-                                val voice = voices.find { it.id == selectedId } ?: return@launch
-                                if (!com.sisa.app.download.AppModelManager.isModelInstalled(this@MainActivity, voice.modelFile)) {
-                                    withContext(Dispatchers.Main) {
-                                        engineStatus.value = "Downloading voice: ${voice.name}…"
-                                    }
-                                    try {
-                                        com.sisa.app.download.AppModelManager.downloadModel(
-                                            context = this@MainActivity,
-                                            urlString = voice.downloadUrl,
-                                            targetFileName = voice.modelFile,
-                                            expectedCrc32 = if (voice.crc32 != 0L) voice.crc32 else null,
-                                            expectedSha256 = voice.sha256
-                                        ).collect { progress ->
-                                            if (progress.isCompleted) {
-                                                withContext(Dispatchers.Main) {
-                                                    engineStatus.value = "Voice downloaded: ${voice.name}"
-                                                }
-                                            } else if (progress.error != null) {
-                                                android.util.Log.e("LiveMode", "Voice download error: ${progress.error}")
-                                            } else {
-                                                val pct = (progress.progressPercent * 100).toInt()
-                                                withContext(Dispatchers.Main) {
-                                                    engineStatus.value = "Downloading voice: $pct%"
-                                                }
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        android.util.Log.e("LiveMode", "Voice download failed", e)
-                                    }
+                        TextButton(
+                            onClick = {
+                                if (downloading) return@TextButton
+                                // Falls vorheriger Fehler: erneut versuchen
+                                if (voiceError != null) voiceDownloadError.value = null
+                                val target = voices.find { it.id == selectedId } ?: return@TextButton
+                                selectedVoiceState.value = selectedId
+                                prefs.edit().putBoolean("voice_selected", true)
+                                    .putString("selected_voice_id", selectedId).apply()
+                                // Set language based on voice selection
+                                val lang = selectedId.substringBefore("_")
+                                localGemma.currentLanguage = lang
+                                voiceService.currentLanguage = lang
+                                androidTts.setLanguage(java.util.Locale.forLanguageTag(lang))
+                                // Bereits installiert -> sofort laden & Dialog schließen
+                                if (com.sisa.app.download.AppModelManager.isModelInstalled(this@MainActivity, target.modelFile)) {
+                                    voiceSelectorState.value = false
+                                    voiceService.loadVoice(target.modelFile)
+                                    return@TextButton
                                 }
-                                voiceService.loadVoice(voice.modelFile)
-                            }
-                        }) {
-                            Text("OK")
+                                // Noch nicht geladen -> Dialog offen halten, Inline-Progress zeigen.
+                                // Schließen erst nach Erfolg (startVoiceDownload setzt Status zurück).
+                                scope.launch(Dispatchers.Default) {
+                                    val ok = startVoiceDownload(target)
+                                    if (ok) {
+                                        withContext(Dispatchers.Main) {
+                                            voiceSelectorState.value = false
+                                        }
+                                    }
+                                    // Bei Fehler: Dialog bleibt offen, Fehler wird inline angezeigt (Retry via OK)
+                                }
+                            },
+                            enabled = !downloading
+                        ) {
+                            Text(
+                                when {
+                                    downloading -> "Downloading…"
+                                    voiceError != null -> "Retry"
+                                    else -> "OK"
+                                }
+                            )
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = {
-                            voiceSelectorState.value = false
-                            prefs.edit().putBoolean("voice_selected", true).apply()
-                        }) {
+                        TextButton(
+                            onClick = {
+                                if (downloading) return@TextButton
+                                voiceSelectorState.value = false
+                                prefs.edit().putBoolean("voice_selected", true).apply()
+                            },
+                            enabled = !downloading
+                        ) {
                             Text("Cancel")
                         }
                     }
@@ -438,9 +500,112 @@ class MainActivity : ComponentActivity() {
                 downloadProgress = modelDownloadProgress.floatValue,
                 showVoiceSelector = voiceSelectorState.value,
                 onShowVoiceSelector = { voiceSelectorState.value = it },
-                onMicPulseTap = ::onManualMicTap
+                onMicPulseTap = ::onManualMicTap,
+                isVoiceDownloading = isVoiceDownloading.value,
+                voiceDownloadProgress = voiceDownloadProgress.floatValue,
+                voiceDownloadDetail = voiceDownloadDetail.value,
+                voiceDownloadingName = voiceDownloadingName.value,
+                voiceDownloadError = voiceDownloadError.value
             )
         }
+    }
+
+    /**
+     * Issue #8: Voice-Download mit sichtbarem Fortschritt.
+     * Steuert [isVoiceDownloading], [voiceDownloadProgress], [voiceDownloadDetail]
+     * und [voiceDownloadError]; lädt nach Erfolg die Stimme via [voiceService].
+     * @return true bei Erfolg, false bei Fehler.
+     */
+    private suspend fun startVoiceDownload(
+        voice: com.sisa.app.download.AppModelManager.VoiceModel,
+        onFinished: ((Boolean) -> Unit)? = null
+    ): Boolean {
+        withContext(Dispatchers.Main) {
+            isVoiceDownloading.value = true
+            voiceDownloadProgress.floatValue = 0f
+            voiceDownloadError.value = null
+            voiceDownloadingName.value = voice.name
+            voiceDownloadDetail.value = "Starting download…"
+            engineStatus.value = "Downloading voice: ${voice.name}…"
+        }
+        var success = false
+        var failureMessage: String? = null
+        try {
+            com.sisa.app.download.AppModelManager.downloadModel(
+                context = this,
+                urlString = voice.downloadUrl,
+                targetFileName = voice.modelFile,
+                expectedCrc32 = if (voice.crc32 != 0L) voice.crc32 else null,
+                expectedSha256 = voice.sha256
+            ).collect { progress ->
+                if (progress.isCompleted) {
+                    success = true
+                    withContext(Dispatchers.Main) {
+                        voiceDownloadProgress.floatValue = 1f
+                        voiceDownloadDetail.value = "Verifying & loading…"
+                        engineStatus.value = "Voice downloaded: ${voice.name}"
+                    }
+                } else if (progress.error != null) {
+                    android.util.Log.e("LiveMode", "Voice download error: ${progress.error}")
+                    failureMessage = progress.error
+                    withContext(Dispatchers.Main) {
+                        voiceDownloadError.value = progress.error
+                        voiceDownloadDetail.value = progress.error ?: "Download failed"
+                        engineStatus.value = "Voice download failed: ${progress.error}"
+                    }
+                } else {
+                    val fraction = progress.progressPercent.coerceIn(0f, 1f)
+                    val pct = (fraction * 100).toInt()
+                    val mb = progress.bytesDownloaded / (1024 * 1024)
+                    val totalMb = progress.totalBytes / (1024 * 1024)
+                    val detail = if (progress.totalBytes > 0) "$pct% ($mb/$totalMb MB)" else "$pct%"
+                    withContext(Dispatchers.Main) {
+                        voiceDownloadProgress.floatValue = fraction
+                        voiceDownloadDetail.value = detail
+                        engineStatus.value = "Downloading voice ${voice.name}: $detail"
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("LiveMode", "Voice download failed", e)
+            failureMessage = e.localizedMessage ?: e.message ?: "Download failed"
+            withContext(Dispatchers.Main) {
+                voiceDownloadError.value = failureMessage
+                voiceDownloadDetail.value = failureMessage ?: "Download failed"
+                engineStatus.value = "Voice download failed: $failureMessage"
+            }
+        }
+        // Checksum-Mismatch / Abbruch ohne Completion als Fehler werten
+        if (!success && failureMessage == null) {
+            failureMessage = voiceDownloadError.value ?: "Download incomplete — check connection & retry"
+            withContext(Dispatchers.Main) {
+                if (voiceDownloadError.value == null) voiceDownloadError.value = failureMessage
+                engineStatus.value = "Voice download failed: $failureMessage"
+            }
+        }
+        if (success) {
+            voiceService.loadVoice(voice.modelFile)
+            withContext(Dispatchers.Main) {
+                voiceDownloadProgress.floatValue = 1f
+                voiceDownloadDetail.value = "Ready"
+                // Kurzes 100%-Feedback, dann Status zurücksetzen (Issue #8, Punkt 4)
+                engineStatus.value = "Voice ready: ${voice.name}"
+            }
+            kotlinx.coroutines.delay(700)
+            withContext(Dispatchers.Main) {
+                isVoiceDownloading.value = false
+                voiceDownloadProgress.floatValue = 0f
+                voiceDownloadDetail.value = ""
+                voiceDownloadError.value = null
+                voiceDownloadingName.value = ""
+            }
+        } else {
+            withContext(Dispatchers.Main) {
+                isVoiceDownloading.value = false
+            }
+        }
+        withContext(Dispatchers.Main) { onFinished?.invoke(success) }
+        return success
     }
 
     private fun autoStartHandsFree() {
@@ -1029,7 +1194,12 @@ fun LiveModeScreen(
     downloadProgress: Float = 0f,
     showVoiceSelector: Boolean = false,
     onShowVoiceSelector: (Boolean) -> Unit = {},
-    onMicPulseTap: () -> Unit = {}
+    onMicPulseTap: () -> Unit = {},
+    isVoiceDownloading: Boolean = false,
+    voiceDownloadProgress: Float = 0f,
+    voiceDownloadDetail: String = "",
+    voiceDownloadingName: String = "",
+    voiceDownloadError: String? = null
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -1231,6 +1401,71 @@ fun LiveModeScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 4.dp)
                     )
+                }
+            }
+
+            // Issue #8: prominenter Voice-Download-Banner über Mikrofon/Chat —
+            // sichtbar auch wenn der Select-Voice-Dialog geschlossen wurde.
+            if (isVoiceDownloading) {
+                val voicePct = (voiceDownloadProgress.coerceIn(0f, 1f) * 100).toInt()
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "Downloading voice ${voiceDownloadingName.ifBlank { "" }}… $voicePct%",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = voiceDownloadProgress.coerceIn(0f, 1f),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            voiceDownloadDetail.ifBlank { "Please keep the app open…" },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+            }
+            if (voiceDownloadError != null && !isVoiceDownloading) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "Voice download failed: $voiceDownloadError — retry via Select Voice.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
             }
 
