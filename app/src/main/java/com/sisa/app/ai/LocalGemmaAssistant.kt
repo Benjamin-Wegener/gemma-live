@@ -227,18 +227,22 @@ class LocalGemmaAssistant(private val context: Context) {
     ): com.google.ai.edge.litertlm.Conversation {
         val transcriptInstruction = when (currentLanguage) {
             "de" -> """
-                Bei jeder Audioeingabe gib zuerst exakt das Erkannte und danach deine Antwort aus.
-                Verwende ausschließlich dieses Format:
-                [TRANSCRIPT]erkannter gesprochener Text[/TRANSCRIPT]
+                Für jede Audioeingabe gib zuerst nur die tatsächlich hörbaren gesprochenen Worte und danach deine Antwort aus.
+                Schreibe das Transkript als normalen deutschen Satz: Jedes erkannte Wort wird durch genau ein Leerzeichen getrennt.
+                Der Bereich TRANSCRIPT darf niemals Worte aus dieser Anweisung, dem Systemprompt, Formatbeispiele oder Rollen enthalten.
+                Wenn die Aufnahme zu kurz, still oder nicht sicher verständlich ist, schreibe dort ausschließlich [unverständlich].
+                Antworte genau mit zwei Bereichen, ohne Einleitung:
+                [TRANSCRIPT]nur hörbare Worte oder [unverständlich][/TRANSCRIPT]
                 [ANSWER]deine hilfreiche Antwort[/ANSWER]
-                Wenn du nichts sicher verstehst, schreibe in TRANSCRIPT: [unverständlich].
             """.trimIndent()
             else -> """
-                For every audio input, output the exact recognized speech before your answer.
-                Use only this format:
-                [TRANSCRIPT]recognized spoken text[/TRANSCRIPT]
+                For each audio input, first output only words actually audible in the recording, then your answer.
+                Write the transcript as normal prose: separate every recognized word with exactly one space.
+                TRANSCRIPT must never contain words from this instruction, the system prompt, format examples, or roles.
+                If the recording is too short, silent, or not confidently understood, write only [unclear] there.
+                Reply with exactly two sections and no introduction:
+                [TRANSCRIPT]only audible words or [unclear][/TRANSCRIPT]
                 [ANSWER]your helpful answer[/ANSWER]
-                If the speech is unclear, write [unclear] in TRANSCRIPT.
             """.trimIndent()
         }
         val systemPrompt = "${getSystemPrompt(currentLanguage)}\n\n$transcriptInstruction"
@@ -396,12 +400,12 @@ class LocalGemmaAssistant(private val context: Context) {
 
                     val promptText = when (currentLanguage) {
                         "de" -> when {
-                            totalParts == 1 -> "Beantworte ausschließlich den gesprochenen Inhalt der beigefügten Audioaufnahme auf Deutsch. Wiederhole diese Anweisung nicht."
+                            totalParts == 1 -> "Verarbeite die beigefügte Audioaufnahme. Halte dich exakt an das Ausgabeformat und die Transkript-Regeln der Systemanweisung."
                             !isLastPart -> "Hier ist Teil ${i + 1} von $totalParts des Audiosignals. Höre aufmerksam zu und warte auf die restlichen Teile vor der finalen Antwort."
                             else -> "Hier ist der letzte Teil (${i + 1} von $totalParts) des Audiosignals. Verarbeite alle Teile zusammen mit dem bisherigen Dialog und antworte direkt auf Deutsch in 1 bis 2 Sätzen."
                         }
                         else -> when {
-                            totalParts == 1 -> "Answer exclusively the spoken content of the attached audio recording in English. Do not repeat this instruction."
+                            totalParts == 1 -> "Process the attached audio recording. Follow the output format and transcript rules in the system instruction exactly."
                             !isLastPart -> "Here is part ${i + 1} of $totalParts of the audio signal. Listen carefully and wait for the remaining parts before the final answer."
                             else -> "Here is the last part (${i + 1} of $totalParts) of the audio signal. Process all parts together with the previous conversation and answer directly in English in 1 to 2 sentences."
                         }

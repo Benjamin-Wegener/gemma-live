@@ -20,6 +20,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
@@ -53,6 +54,7 @@ import com.sisa.app.tts.AndroidTtsService
 import com.sisa.app.tts.SisaVoiceService
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 enum class LiveState {
     LOADING, IDLE, LISTENING, THINKING, SPEAKING
@@ -67,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private var sttManager: AndroidSttManager? = null
     private val speechBuffer = java.io.ByteArrayOutputStream()
     private val speechBufferLock = Any()
+    @Volatile private var speechPreRoll = FloatArray(0)
     @Volatile private var isCollectingSpeech = false
     /**
      * Echo-Schutz über die gesamte VAD-Segmentdauer, nicht nur beim Segmentende:
@@ -87,6 +90,8 @@ class MainActivity : ComponentActivity() {
     private val speechMutex = kotlinx.coroutines.sync.Mutex()
     /** Direct-audio turns must never wait behind the legacy text/STT path. */
     private val directAudioInFlight = AtomicBoolean(false)
+    /** Invalidiert Frames und Antworten eines gestoppten Mikrofon-Laufs. */
+    private val audioSessionGeneration = AtomicLong(0)
     // Zeitpunkt (elapsedRealtime) des letzten echten User-Inputs via Broadcast.
     // Verhindert im BENCHMARK_MODE Doppel-Antworten: feuert VAD-SpeechStopped kurz
     // nach einem Broadcast (externer Loop spricht), wird der Hardcode-Turn
@@ -420,7 +425,8 @@ class MainActivity : ComponentActivity() {
                 engineStatus = engineStatus.value,
                 downloadProgress = modelDownloadProgress.floatValue,
                 showVoiceSelector = voiceSelectorState.value,
-                onShowVoiceSelector = { voiceSelectorState.value = it }
+                onShowVoiceSelector = { voiceSelectorState.value = it },
+                onMicPulseTap = ::onManualMicTap
             )
         }
     }
@@ -602,12 +608,33 @@ class MainActivity : ComponentActivity() {
 
     /** Separates the Direct-Audio system-prompt envelope from speech output. */
     private fun parseDirectAudioReply(raw: String): Pair<String, String> {
-        val transcript = Regex("(?s)\\[TRANSCRIPT\\]\\s*(.*?)\\s*\\[/TRANSCRIPT\\]")
+        val rawTranscript = Regex("(?s)\\[TRANSCRIPT\\]\\s*(.*?)\\s*\\[/TRANSCRIPT\\]")
             .find(raw)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+        val transcript = if (isPromptLeak(rawTranscript)) {
+            Log.w("LiveMode", "Discarded prompt text incorrectly returned as audio transcript")
+            "[unverständlich]"
+        } else {
+            rawTranscript
+        }
         val answer = Regex("(?s)\\[ANSWER\\]\\s*(.*?)\\s*\\[/ANSWER\\]")
             .find(raw)?.groupValues?.getOrNull(1)?.trim()
             ?: raw.replace(Regex("(?s)\\[TRANSCRIPT\\].*?\\[/TRANSCRIPT\\]"), "").trim()
         return transcript to answer
+    }
+
+    /** A short/quiet first recording can make the model echo the audio instruction. */
+    private fun isPromptLeak(text: String): Boolean {
+        val normalized = text.lowercase()
+            .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+            .filter(Char::isLetterOrDigit)
+        return listOf(
+            "beantworteausschliesslichdengesprocheneninhalt",
+            "wiederholedieseanweisung",
+            "transcript",
+            "recognizedspokentext",
+            "onlyaudiblewords",
+            "systemprompt"
+        ).any(normalized::contains)
     }
 
     private fun interruptAiSpeech() {
@@ -627,23 +654,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onManualMicTap() {
-        when (liveState.value) {
-            LiveState.SPEAKING -> interruptAiSpeech()
-            LiveState.LISTENING -> {
-                sttManager?.stopListening()
-                liveState.value = LiveState.IDLE
-            }
-            LiveState.IDLE -> {
-                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                    currentTranscript.value = ""
-                    liveState.value = LiveState.LISTENING
-                } else {
-                    requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 101)
-                }
-            }
-            LiveState.THINKING -> {}
-            LiveState.LOADING -> {}
-        }
+        // Der große Mikrofon-Puls ist der eine Live-Schalter: auch während Gemma
+        // spricht stoppt ein Tippen TTS *und* die laufende Mikrofonaufnahme.
+        if (liveState.value != LiveState.LOADING) toggleHandsFree()
     }
 
     private fun toggleHandsFree() {
@@ -665,6 +678,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startContinuousAudioLoop() {
+        val sessionGeneration = audioSessionGeneration.incrementAndGet()
         scope.launch(Dispatchers.Default) {
             try {
                 val detector = TurnDetector(this@MainActivity).also { turnDetector = it }
@@ -690,7 +704,10 @@ class MainActivity : ComponentActivity() {
                     }
                     else -> null
                 }
-                loop.start(sourceOverride = sourceOverride) { frame ->
+                loop.start(sourceOverride = sourceOverride) frameListener@ { frame ->
+                    if (!isHandsFreeActive.value || audioSessionGeneration.get() != sessionGeneration) {
+                        return@frameListener
+                    }
                     volumeLevel.floatValue = (frame.peak.toFloat() / 32768f).coerceIn(0f, 1f)
 
                     // Mic bleibt IMMER offen und nimmt auf — auch während KI redet.
@@ -743,8 +760,22 @@ class MainActivity : ComponentActivity() {
                                     android.util.Log.i("LiveMode", "VAD SpeechStarted detected")
                                 }
                                 synchronized(speechBufferLock) {
+                                    // Eine volle Sekunde vor dem VAD-Start bewahren. Der VAD
+                                    // erkennt Sprache erst nach einigen Frames; ohne Pre-Roll
+                                    // fehlt Gemma häufig die erste Silbe bzw. das erste Wort.
+                                    val ring = loop.snapshot()
+                                    val samplesBeforeCurrentFrame = (ring.size - frame.samples.size).coerceAtLeast(0)
+                                    val preRollStart = (samplesBeforeCurrentFrame - 16_000).coerceAtLeast(0)
+                                    val preRollShorts = ring.copyOfRange(preRollStart, samplesBeforeCurrentFrame)
+                                    speechPreRoll = FloatArray(preRollShorts.size) { index ->
+                                        preRollShorts[index] / 32768.0f
+                                    }
                                     speechBuffer.reset()
                                     isCollectingSpeech = true
+                                    for (sample in preRollShorts) {
+                                        speechBuffer.write(sample.toInt() and 0xff)
+                                        speechBuffer.write((sample.toInt() shr 8) and 0xff)
+                                    }
                                     // Puffer mit aktuellem Frame füllen
                                     val byteBuf = java.nio.ByteBuffer.allocate(frame.samples.size * 2)
                                         .order(java.nio.ByteOrder.LITTLE_ENDIAN)
@@ -753,6 +784,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             is TurnDetector.Event.SpeechStopped -> {
+                                if (!isHandsFreeActive.value || audioSessionGeneration.get() != sessionGeneration) {
+                                    synchronized(speechBufferLock) { speechBuffer.reset() }
+                                    return@process
+                                }
                                 android.util.Log.i("LiveMode", "VAD SpeechStopped detected durationMs=${event.speechDurationMs}")
                                 isCollectingSpeech = false
                                 // Echo-Drop: lief die KI-Ausgabe während dieses Segments, ist es Echo —
@@ -767,7 +802,9 @@ class MainActivity : ComponentActivity() {
                                     synchronized(speechBufferLock) { speechBuffer.reset() }
                                     // VAD-Segment verwerfen, kein Whisper-Call
                                 } else {
-                                    val sileroSamples = event.audioSamples
+                                val sileroSamples = event.audioSamples
+                                val preRoll = speechPreRoll
+                                speechPreRoll = FloatArray(0)
                                     val pcmData: ShortArray = synchronized(speechBufferLock) {
                                         val bytes = speechBuffer.toByteArray()
                                         speechBuffer.reset()
@@ -776,11 +813,14 @@ class MainActivity : ComponentActivity() {
                                             .asShortBuffer().get(shorts)
                                         shorts
                                     }
-                                    val samplesToUse = if (sileroSamples != null && sileroSamples.isNotEmpty()) {
-                                        sileroSamples
-                                    } else if (pcmData.size >= 16000 * 0.25) {
-                                        FloatArray(pcmData.size) { i -> pcmData[i] / 32768.0f }
-                                    } else null
+                                val turnSamples = if (sileroSamples != null && sileroSamples.isNotEmpty()) {
+                                    sileroSamples
+                                } else if (pcmData.size >= 16000 * 0.25) {
+                                    FloatArray(pcmData.size) { i -> pcmData[i] / 32768.0f }
+                                } else null
+                                val samplesToUse = turnSamples?.let { turn ->
+                                    if (preRoll.isEmpty()) turn else preRoll + turn
+                                }
                                     if (externalMicMode) {
                                         Log.i("LiveMode", "VAD turn ignored: external microphone supplies ACTION_USER_INPUT")
                                     } else if (samplesToUse == null || samplesToUse.isEmpty()) {
@@ -788,13 +828,17 @@ class MainActivity : ComponentActivity() {
                                     } else {
                                         // Do not queue this hand-off on Dispatchers.Main: a busy UI must never
                                         // make a completed VAD turn disappear without inference or a log entry.
-                                        Log.i("LiveMode", "Direct audio turn queued (${samplesToUse.size} samples)")
+                                        Log.i("LiveMode", "Direct audio turn queued (${samplesToUse.size} samples, preRoll=${preRoll.size})")
                                         if (!directAudioInFlight.compareAndSet(false, true)) {
                                             Log.w("LiveMode", "VAD turn skipped: direct-audio inference is already active")
                                             return@process
                                         }
                                         scope.launch(Dispatchers.Default) {
                                             try {
+                                                if (!isHandsFreeActive.value || audioSessionGeneration.get() != sessionGeneration) {
+                                                    Log.i("LiveMode", "Discarded audio turn from stopped microphone session")
+                                                    return@launch
+                                                }
                                                 Log.i("LiveMode", "Direct audio turn acquired inference lock")
                                                 val busy = liveState.value == LiveState.SPEAKING ||
                                                     liveState.value == LiveState.THINKING
@@ -820,6 +864,10 @@ class MainActivity : ComponentActivity() {
                                                 val rawResponse = localGemma.processAudioDirectly(samplesToUse, onChunkReceived)
                                                 val (recognizedText, responseText) = parseDirectAudioReply(rawResponse)
                                                 scope.launch(Dispatchers.Main) {
+                                                    if (!isHandsFreeActive.value || audioSessionGeneration.get() != sessionGeneration) {
+                                                        Log.i("LiveMode", "Discarded response from stopped microphone session")
+                                                        return@launch
+                                                    }
                                                     if (responseText.isBlank()) {
                                                         Log.w("LiveMode", "Gemma returned an empty direct-audio response")
                                                         liveState.value = LiveState.IDLE
@@ -861,7 +909,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stopContinuousAudioLoop() {
-        // AudioLoop stops when activity closes or detached
+        audioSessionGeneration.incrementAndGet()
+        isCollectingSpeech = false
+        speechPreRoll = FloatArray(0)
+        synchronized(speechBufferLock) { speechBuffer.reset() }
+        turnDetector?.reset()
+        turnDetector = null
+        val loop = audioLoop
+        audioLoop = null
+        scope.launch(Dispatchers.Default) {
+            runCatching { loop?.stop() }
+                .onFailure { Log.w("LiveMode", "Could not stop microphone loop", it) }
+        }
     }
 
     /** Startet den Dummy-FGS (Typ mediaProjection) für getMediaProjection(). */
@@ -957,7 +1016,8 @@ fun LiveModeScreen(
     engineStatus: String = "",
     downloadProgress: Float = 0f,
     showVoiceSelector: Boolean = false,
-    onShowVoiceSelector: (Boolean) -> Unit = {}
+    onShowVoiceSelector: (Boolean) -> Unit = {},
+    onMicPulseTap: () -> Unit = {}
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -986,6 +1046,13 @@ fun LiveModeScreen(
     }
 
     var showLicensesDialog by remember { mutableStateOf(false) }
+    val chatListState = rememberLazyListState()
+
+    LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            chatListState.animateScrollToItem(chatMessages.lastIndex)
+        }
+    }
 
     if (showLicensesDialog) {
         AlertDialog(
@@ -1103,8 +1170,9 @@ fun LiveModeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Status-Header
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Beim Hören und Nachdenken zeigt ausschließlich der Puls den Zustand.
+            // Dadurch bleibt der Chat beim Übergang LISTENING <-> THINKING an derselben Stelle.
+            if (liveState != LiveState.LISTENING && liveState != LiveState.THINKING) Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = stateTitle,
                     style = MaterialTheme.typography.headlineMedium,
@@ -1145,12 +1213,13 @@ fun LiveModeScreen(
                 }
             }
 
-            // Zentraler lebendiger Audio-Orb (reine Anzeige, kein Button)
+            // Zentraler Mikrofon-Puls: schaltet Live-Mikrofon und Gemma-Ausgabe gemeinsam.
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(190.dp)
                     .clip(CircleShape)
+                    .clickable(onClick = onMicPulseTap)
             ) {
                 // Äußerer Pulsier-Ring
                 Box(
@@ -1209,11 +1278,13 @@ fun LiveModeScreen(
                 }
             }
 
-            // Conversation bubbles: user right, Gemma left, like a messaging app.
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 8.dp)
+            // Conversation bubbles fade softly beneath the microphone control.
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                LazyColumn(
+                    state = chatListState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 items(chatMessages) { message ->
                     Row(
@@ -1239,6 +1310,21 @@ fun LiveModeScreen(
                         }
                     }
                 }
+            }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .align(Alignment.TopCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.background,
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                                )
+                            )
+                        )
+                )
             }
 
             Spacer(Modifier.height(16.dp))
