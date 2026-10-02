@@ -149,9 +149,17 @@ class MainActivity : ComponentActivity() {
         getPreferences(MODE_PRIVATE).edit().putString("audio_source_mode", mode).apply()
         audioSourceMode = mode
     }
-
     // Observable states
     private var liveState = mutableStateOf(LiveState.IDLE)
+    /**
+     * Zentraler LiveState-Wechsel mit BENCH-Marker für externe Test-Harnesses
+     * (z. B. lokaler Thorsten-Dialog über Luftweg wartet auf state=LISTENING).
+     */
+    private fun setLiveState(state: LiveState) {
+        if (liveState.value == state) return
+        liveState.value = state
+        android.util.Log.i("BENCH", "BENCH live_state t_elapsed_ns=${android.os.SystemClock.elapsedRealtimeNanos()} state=$state")
+    }
     private var currentTranscript = mutableStateOf("")
     private var lastAiResponse = mutableStateOf("")
     private val chatMessages = mutableStateListOf<ChatBubbleMessage>()
@@ -203,9 +211,9 @@ class MainActivity : ComponentActivity() {
             },
             onListeningStateChanged = { listening ->
                 if (listening) {
-                    liveState.value = LiveState.LISTENING
+                    setLiveState(LiveState.LISTENING)
                 } else if (liveState.value == LiveState.LISTENING) {
-                    liveState.value = LiveState.IDLE
+                    setLiveState(LiveState.IDLE)
                 }
             }
         )
@@ -222,7 +230,7 @@ class MainActivity : ComponentActivity() {
         voiceService.currentLanguage = lang
         androidTts.setLanguage(java.util.Locale.forLanguageTag(lang))
         voiceService.initAsync(initialVoice.modelFile) { }
-        liveState.value = LiveState.LOADING
+        setLiveState(LiveState.LOADING)
         isHandsFreeActive.value = false
         engineStatus.value = "Loading engine …"
         scope.launch(Dispatchers.Default) {
@@ -319,7 +327,7 @@ class MainActivity : ComponentActivity() {
                     android.util.Log.w("LiveMode", "LocalGemma could not be loaded (model not imported?)")
                     isEngineReady.value = false
                     engineStatus.value = "Model missing or could not be loaded"
-                    liveState.value = LiveState.IDLE
+                    setLiveState(LiveState.IDLE)
                 }
             }
         }
@@ -613,10 +621,10 @@ class MainActivity : ComponentActivity() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             isHandsFreeActive.value = true
             startContinuousAudioLoop()
-            liveState.value = LiveState.LISTENING
+            setLiveState(LiveState.LISTENING)
         } else {
             // Ladeanzeige bleibt aktiv bis Permission da ist
-            liveState.value = LiveState.LOADING
+            setLiveState(LiveState.LOADING)
             engineStatus.value = "Microphone permission needed …"
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 101)
         }
@@ -671,13 +679,13 @@ class MainActivity : ComponentActivity() {
                         val text = intent.getStringExtra("text") ?: return
                         android.util.Log.i("LiveMode", "Received ACTION_SPEAK: $text")
                         lastAiResponse.value = text
-                        liveState.value = LiveState.SPEAKING
+                        setLiveState(LiveState.SPEAKING)
                         aiSpeakStartNs = android.os.SystemClock.elapsedRealtimeNanos()
                         gemmaVoice.speak(text) {
                             if (isHandsFreeActive.value) {
-                                liveState.value = LiveState.LISTENING
+                                setLiveState(LiveState.LISTENING)
                             } else {
-                                liveState.value = LiveState.IDLE
+                                setLiveState(LiveState.IDLE)
                             }
                         }
                     }
@@ -722,7 +730,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleUserSpeechFinished(utterance: String) {
         chatMessages.add(ChatBubbleMessage(utterance, fromUser = true))
-        liveState.value = LiveState.THINKING
+        setLiveState(LiveState.THINKING)
         scope.launch {
             speechMutex.lock()
             try {
@@ -730,14 +738,14 @@ class MainActivity : ComponentActivity() {
                 val onChunkReceived: (String) -> Unit = { chunk ->
                     if (firstChunk) {
                         firstChunk = false
-                        liveState.value = LiveState.SPEAKING
+                        setLiveState(LiveState.SPEAKING)
                         lastAiResponse.value = chunk
                         aiSpeakStartNs = android.os.SystemClock.elapsedRealtimeNanos()
                         gemmaVoice.speak(chunk) {
                             if (isHandsFreeActive.value) {
-                                liveState.value = LiveState.LISTENING
+                                setLiveState(LiveState.LISTENING)
                             } else {
-                                liveState.value = LiveState.IDLE
+                                setLiveState(LiveState.IDLE)
                             }
                         }
                     } else {
@@ -745,9 +753,9 @@ class MainActivity : ComponentActivity() {
                         aiSpeakStartNs = android.os.SystemClock.elapsedRealtimeNanos()
                         gemmaVoice.speak(chunk) {
                             if (isHandsFreeActive.value) {
-                                liveState.value = LiveState.LISTENING
+                                setLiveState(LiveState.LISTENING)
                             } else {
-                                liveState.value = LiveState.IDLE
+                                setLiveState(LiveState.IDLE)
                             }
                         }
                     }
@@ -772,7 +780,7 @@ class MainActivity : ComponentActivity() {
                     chatMessages.add(ChatBubbleMessage(fullResponse, fromUser = false))
                 } else {
                     android.util.Log.e("LiveMode", "LocalGemma nicht verfügbar und kein Fallback aktiv.")
-                    liveState.value = LiveState.IDLE
+                    setLiveState(LiveState.IDLE)
                     lastAiResponse.value = "Model is still loading or not available."
                 }
             } finally {
@@ -901,9 +909,9 @@ class MainActivity : ComponentActivity() {
             synchronized(speechBufferLock) { speechBuffer.reset() }
             isCollectingSpeech = true
                                                                                 if (isHandsFreeActive.value) {
-                                                                                    liveState.value = LiveState.LISTENING
+                                                                                    setLiveState(LiveState.LISTENING)
                                                                                 } else {
-                liveState.value = LiveState.IDLE
+                setLiveState(LiveState.IDLE)
             }
         }
     }
@@ -922,13 +930,13 @@ class MainActivity : ComponentActivity() {
             }
             isHandsFreeActive.value = true
             startContinuousAudioLoop()
-            liveState.value = LiveState.LISTENING
+            setLiveState(LiveState.LISTENING)
         } else {
             isHandsFreeActive.value = false
             stopContinuousAudioLoop()
             sttManager?.stopListening()
             gemmaVoice.stop()
-            liveState.value = LiveState.IDLE
+            setLiveState(LiveState.IDLE)
         }
     }
 
@@ -1106,7 +1114,7 @@ class MainActivity : ComponentActivity() {
                                                 // the UI dispatcher did not run the continuation.
                                                 scope.launch(Dispatchers.Main) {
                                                     currentTranscript.value = "Gemma E2B audio input (${"%.1f".format(samplesToUse.size / 16000.0)}s)…"
-                                                    liveState.value = LiveState.THINKING
+                                                    setLiveState(LiveState.THINKING)
                                                 }
                                                 Log.i("LiveMode", "Gemma E2B Direct Audio Processing started (${samplesToUse.size} samples)")
                                                 val onChunkReceived: (String) -> Unit = { chunk ->
@@ -1125,7 +1133,7 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                     if (responseText.isBlank()) {
                                                         Log.w("LiveMode", "Gemma returned an empty direct-audio response")
-                                                        liveState.value = LiveState.IDLE
+                                                        setLiveState(LiveState.IDLE)
                                                     } else {
                                                         if (recognizedText.isNotBlank()) {
                                                             currentTranscript.value = recognizedText
@@ -1133,20 +1141,20 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                         lastAiResponse.value = responseText
                                                         chatMessages.add(ChatBubbleMessage(responseText, fromUser = false))
-                                                        liveState.value = LiveState.SPEAKING
+                                                        setLiveState(LiveState.SPEAKING)
                                                         aiSpeakStartNs = SystemClock.elapsedRealtimeNanos()
                                                         gemmaVoice.speak(responseText) {
                                                             if (isHandsFreeActive.value) {
-                                                                liveState.value = LiveState.LISTENING
+                                                                setLiveState(LiveState.LISTENING)
                                                             } else {
-                                                                liveState.value = LiveState.IDLE
+                                                                setLiveState(LiveState.IDLE)
                                                             }
                                                         }
                                                     }
                                                 }
                                             } catch (t: Throwable) {
                                                 Log.e("LiveMode", "Direct audio turn failed", t)
-                                                scope.launch(Dispatchers.Main) { liveState.value = LiveState.IDLE }
+                                                scope.launch(Dispatchers.Main) { setLiveState(LiveState.IDLE) }
                                             } finally {
                                                 directAudioInFlight.set(false)
                                             }
