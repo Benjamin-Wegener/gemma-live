@@ -1,7 +1,7 @@
-package com.sisa.app.ai
+package com.example.gemma_live.ai
 
 import android.util.Log
-import com.sisa.app.BuildConfig
+import com.example.gemma_live.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext

@@ -1,4 +1,4 @@
-package com.sisa.app.stt
+package com.example.gemma_live.stt
 
 import android.content.Context
 import android.content.Intent

@@ -1,4 +1,4 @@
-package com.sisa.app.ai
+package com.example.gemma_live.ai
 
 import android.Manifest
 import android.content.Context

@@ -12,10 +12,6 @@
     <!-- Kein READ/WRITE_EXTERNAL_STORAGE: Scoped Storage (app-privat + MediaStore).
          Legacy-Permissions führten auf API 34 zu Ablehnung/Crash. -->
 
-    <!-- Companion-App für In-Emulator-Duplex (UID-Lookup für Playback-Capture). -->
-    <queries>
-        <package android:name="com.sisa.outsidevoice.live" />
-    </queries>
 
     <application
         android:name=".GemmaApp"

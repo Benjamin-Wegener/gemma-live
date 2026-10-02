@@ -1,4 +1,4 @@
-package com.sisa.app.ai
+package com.example.gemma_live.ai
 
 import android.content.Context
 import android.os.SystemClock
@@ -6,7 +6,7 @@ import android.util.Log
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
-import com.sisa.app.download.AppModelManager
+import com.example.gemma_live.download.AppModelManager
 import java.io.File
 
 /**

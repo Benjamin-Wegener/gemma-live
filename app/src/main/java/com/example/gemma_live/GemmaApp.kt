@@ -1,4 +1,4 @@
-package com.sisa.app
+package com.example.gemma_live
 
 import android.app.Application
 

@@ -1,4 +1,4 @@
-package com.sisa.app.ai
+package com.example.gemma_live.ai
 
 import android.content.Context
 import android.media.AudioFormat
@@ -6,7 +6,7 @@ import android.media.MediaRecorder
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
-import com.sisa.app.BuildConfig
+import com.example.gemma_live.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

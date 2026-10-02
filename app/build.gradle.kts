@@ -14,7 +14,7 @@ plugins {
 val e2bUrl: String = (project.findProperty("e2bUrl") as String?)?.trim() ?: ""
 
 android {
-    namespace = "com.sisa.app"
+    namespace = "com.example.gemma_live"
     compileSdk = 34
 
     defaultConfig {

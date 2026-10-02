@@ -1,4 +1,4 @@
-package com.sisa.app.ai
+package com.example.gemma_live.ai
 
 import android.content.Context
 import android.os.SystemClock
@@ -17,7 +17,7 @@ import com.google.ai.edge.litertlm.Role
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.Session
 import com.google.ai.edge.litertlm.SessionConfig
-import com.sisa.app.download.AppModelManager
+import com.example.gemma_live.download.AppModelManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

@@ -1,4 +1,4 @@
-package com.sisa.app.tts
+package com.example.gemma_live.tts
 
 import android.content.Context
 import android.media.AudioAttributes
@@ -9,7 +9,7 @@ import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
-import com.sisa.app.download.AppModelManager
+import com.example.gemma_live.download.AppModelManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -255,7 +255,7 @@ class GemmaVoiceService(
             onDone()
             return
         }
-        if (!com.sisa.app.BuildConfig.BENCHMARK_MODE && !fallback.ensureAudible()) {
+        if (!com.example.gemma_live.BuildConfig.BENCHMARK_MODE && !fallback.ensureAudible()) {
             onDone()
             return
         }

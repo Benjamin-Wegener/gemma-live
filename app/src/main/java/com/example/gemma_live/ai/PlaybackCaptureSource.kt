@@ -1,4 +1,4 @@
-package com.sisa.app.ai
+package com.example.gemma_live.ai
 
 import android.Manifest
 import android.content.Context
@@ -28,7 +28,7 @@ class PlaybackCaptureSource(
     private val context: Context,
     private val projection: MediaProjection,
     private val config: AudioLoop.Config = AudioLoop.Config(),
-    private val targetPackage: String = "com.sisa.outsidevoice.live",
+    private val targetPackage: String = "com.example.voice.companion",
 ) : AudioFrameSource {
 
     private var audioRecord: AudioRecord? = null

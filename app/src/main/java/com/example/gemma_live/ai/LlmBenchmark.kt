@@ -1,4 +1,4 @@
-package com.sisa.app.ai
+package com.example.gemma_live.ai
 
 import android.app.ActivityManager
 import android.content.Context
@@ -11,7 +11,7 @@ import com.google.ai.edge.litertlm.InputData
 import com.google.ai.edge.litertlm.ResponseCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.SessionConfig
-import com.sisa.app.download.AppModelManager
+import com.example.gemma_live.download.AppModelManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

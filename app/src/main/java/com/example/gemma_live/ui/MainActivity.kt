@@ -1,4 +1,4 @@
-package com.sisa.app.ui
+package com.example.gemma_live.ui
 
 import android.Manifest
 import android.content.BroadcastReceiver
@@ -44,14 +44,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.sisa.app.ai.AudioLoop
-import com.sisa.app.ai.E2BAIService
-import com.sisa.app.ai.LlmBenchmark
-import com.sisa.app.ai.LocalGemmaAssistant
-import com.sisa.app.ai.TurnDetector
-import com.sisa.app.stt.AndroidSttManager
-import com.sisa.app.tts.AndroidTtsService
-import com.sisa.app.tts.GemmaVoiceService
+import com.example.gemma_live.ai.AudioLoop
+import com.example.gemma_live.ai.E2BAIService
+import com.example.gemma_live.ai.LlmBenchmark
+import com.example.gemma_live.ai.LocalGemmaAssistant
+import com.example.gemma_live.ai.TurnDetector
+import com.example.gemma_live.stt.AndroidSttManager
+import com.example.gemma_live.tts.AndroidTtsService
+import com.example.gemma_live.tts.GemmaVoiceService
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -65,7 +65,7 @@ data class ChatBubbleMessage(val text: String, val fromUser: Boolean)
 class MainActivity : ComponentActivity() {
 
     private lateinit var androidTts: AndroidTtsService
-    private lateinit var voiceService: com.sisa.app.tts.GemmaVoiceService
+    private lateinit var voiceService: com.example.gemma_live.tts.GemmaVoiceService
     private val gemmaVoice get() = voiceService
     private var sttManager: AndroidSttManager? = null
     private val speechBuffer = java.io.ByteArrayOutputStream()
@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
      * VAD läuft weiter (Barge-In per Dazwischenreden bleibt aktiv), aber
      * SpeechStopped löst NIE einen Hardcode-Turn aus — der Inhalt kommt immer
      * per ACTION_USER_INPUT (Host-STT) als Broadcast. Umschaltung zur Laufzeit:
-     * `adb shell "am broadcast -a com.sisa.app.live.ACTION_SET_EXTERNAL_MIC
+     * `adb shell "am broadcast -a com.example.gemma_live.live.ACTION_SET_EXTERNAL_MIC
      * --ez enabled true"`.
      */
     @Volatile
@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity() {
      *   AudioPlaybackCaptureConfiguration, API 29+) — Duplex-Test komplett
      *   im Emulator ohne Host-Audio.
      * Umschaltung: `adb shell "am broadcast -a
-     * com.sisa.app.live.ACTION_SET_AUDIO_SOURCE --es mode capture"`
+     * com.example.gemma_live.live.ACTION_SET_AUDIO_SOURCE --es mode capture"`
      * (danach Activity neu starten, z. B. force-stop + start).
      */
     @Volatile
@@ -135,7 +135,7 @@ class MainActivity : ComponentActivity() {
     /**
      * MediaProjection-Token für PlaybackCapture (einmalige Nutzer-Zustimmung
      * pro Boot). Anforderung: `adb shell "am broadcast -a
-     * com.sisa.app.live.ACTION_REQUEST_CAPTURE"` (Activity muss im Vordergrund
+     * com.example.gemma_live.live.ACTION_REQUEST_CAPTURE"` (Activity muss im Vordergrund
      * sein), danach Consent-Dialog per Tap bestätigen (im Test automatisiert).
      */
     @Volatile
@@ -190,7 +190,7 @@ class MainActivity : ComponentActivity() {
         if (audioSourceMode == "capture") ensureCaptureHolder()
 
         androidTts = AndroidTtsService(this)
-        voiceService = com.sisa.app.tts.GemmaVoiceService(this, androidTts)
+        voiceService = com.example.gemma_live.tts.GemmaVoiceService(this, androidTts)
 
         // Gemma E2B handles direct audio. Android STT remains an optional fallback.
         sttManager = AndroidSttManager(
@@ -223,8 +223,8 @@ class MainActivity : ComponentActivity() {
         val savedVoiceId = voicePrefs.getString("selected_voice_id", "en_US-amy-medium")
             ?: "en_US-amy-medium"
         selectedVoiceId.value = savedVoiceId
-        val initialVoice = com.sisa.app.download.AppModelManager.PIPER_VOICES.find { it.id == savedVoiceId }
-            ?: com.sisa.app.download.AppModelManager.PIPER_VOICES.first()
+        val initialVoice = com.example.gemma_live.download.AppModelManager.PIPER_VOICES.find { it.id == savedVoiceId }
+            ?: com.example.gemma_live.download.AppModelManager.PIPER_VOICES.first()
         val lang = initialVoice.id.substringBefore("_")
         localGemma.currentLanguage = lang
         voiceService.currentLanguage = lang
@@ -236,7 +236,7 @@ class MainActivity : ComponentActivity() {
         scope.launch(Dispatchers.Default) {
             var downloadedGemmaThisLaunch = false
             // Auto-download Gemma model if not found (with progress, resume, retry)
-            if (!com.sisa.app.download.AppModelManager.isPrivateModelInstalled(this@MainActivity, com.sisa.app.download.AppModelManager.GEMMA_FILE)) {
+            if (!com.example.gemma_live.download.AppModelManager.isPrivateModelInstalled(this@MainActivity, com.example.gemma_live.download.AppModelManager.GEMMA_FILE)) {
                 downloadedGemmaThisLaunch = true
                 modelDownloadProgress.floatValue = 0f
                 engineStatus.value = "Checking Download/models for Gemma…"
@@ -246,11 +246,11 @@ class MainActivity : ComponentActivity() {
                 var downloadSuccess = false
                 while (retryCount < maxRetries && !downloadSuccess) {
                     try {
-                        com.sisa.app.download.AppModelManager.downloadModel(
+                        com.example.gemma_live.download.AppModelManager.downloadModel(
                             context = this@MainActivity,
-                            urlString = com.sisa.app.download.AppModelManager.GEMMA_4_URL,
-                            targetFileName = com.sisa.app.download.AppModelManager.GEMMA_FILE,
-                            expectedSha256 = com.sisa.app.download.AppModelManager.GEMMA_4_SHA256
+                            urlString = com.example.gemma_live.download.AppModelManager.GEMMA_4_URL,
+                            targetFileName = com.example.gemma_live.download.AppModelManager.GEMMA_FILE,
+                            expectedSha256 = com.example.gemma_live.download.AppModelManager.GEMMA_4_SHA256
                         ).collect { progress ->
                             if (progress.isCompleted) {
                                 android.util.Log.i("LiveMode", "Gemma model download completed")
@@ -345,7 +345,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             // Voice selector dialog (Issue #8: Inline-Fortschritt beim Nachladen)
             if (voiceSelectorState.value) {
-                val voices = com.sisa.app.download.AppModelManager.PIPER_VOICES
+                val voices = com.example.gemma_live.download.AppModelManager.PIPER_VOICES
                 var selectedId by remember { mutableStateOf(selectedVoiceState.value) }
                 val downloading = isVoiceDownloading.value
                 val voiceProgress = voiceDownloadProgress.floatValue
@@ -365,7 +365,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             voices.forEach { voice ->
                                 val installed = remember(voice.modelFile) {
-                                    com.sisa.app.download.AppModelManager.isModelInstalled(
+                                    com.example.gemma_live.download.AppModelManager.isModelInstalled(
                                         this@MainActivity, voice.modelFile
                                     )
                                 }
@@ -453,7 +453,7 @@ class MainActivity : ComponentActivity() {
                                 voiceService.currentLanguage = lang
                                 androidTts.setLanguage(java.util.Locale.forLanguageTag(lang))
                                 // Bereits installiert -> sofort laden & Dialog schließen
-                                if (com.sisa.app.download.AppModelManager.isModelInstalled(this@MainActivity, target.modelFile)) {
+                                if (com.example.gemma_live.download.AppModelManager.isModelInstalled(this@MainActivity, target.modelFile)) {
                                     voiceSelectorState.value = false
                                     voiceService.loadVoice(target.modelFile)
                                     return@TextButton
@@ -523,7 +523,7 @@ class MainActivity : ComponentActivity() {
      * @return true bei Erfolg, false bei Fehler.
      */
     private suspend fun startVoiceDownload(
-        voice: com.sisa.app.download.AppModelManager.VoiceModel,
+        voice: com.example.gemma_live.download.AppModelManager.VoiceModel,
         onFinished: ((Boolean) -> Unit)? = null
     ): Boolean {
         withContext(Dispatchers.Main) {
@@ -537,7 +537,7 @@ class MainActivity : ComponentActivity() {
         var success = false
         var failureMessage: String? = null
         try {
-            com.sisa.app.download.AppModelManager.downloadModel(
+            com.example.gemma_live.download.AppModelManager.downloadModel(
                 context = this,
                 urlString = voice.downloadUrl,
                 targetFileName = voice.modelFile,
@@ -659,23 +659,23 @@ class MainActivity : ComponentActivity() {
 
     private fun registerLiveBroadcastReceiver() {
         val filter = android.content.IntentFilter().apply {
-            addAction("com.sisa.app.live.ACTION_SPEAK")
-            addAction("com.sisa.app.live.ACTION_USER_INPUT")
-            addAction("com.sisa.app.live.ACTION_INTERRUPT")
-            addAction("com.sisa.app.live.ACTION_TOGGLE_HANDSFREE")
-            addAction("com.sisa.app.live.ACTION_RUN_BENCHMARK")
-            addAction("com.sisa.app.live.ACTION_SET_EXTERNAL_MIC")
-            addAction("com.sisa.app.live.ACTION_SET_AUDIO_SOURCE")
-            addAction("com.sisa.app.live.ACTION_REQUEST_CAPTURE")
+            addAction("com.example.gemma_live.live.ACTION_SPEAK")
+            addAction("com.example.gemma_live.live.ACTION_USER_INPUT")
+            addAction("com.example.gemma_live.live.ACTION_INTERRUPT")
+            addAction("com.example.gemma_live.live.ACTION_TOGGLE_HANDSFREE")
+            addAction("com.example.gemma_live.live.ACTION_RUN_BENCHMARK")
+            addAction("com.example.gemma_live.live.ACTION_SET_EXTERNAL_MIC")
+            addAction("com.example.gemma_live.live.ACTION_SET_AUDIO_SOURCE")
+            addAction("com.example.gemma_live.live.ACTION_REQUEST_CAPTURE")
         }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
-                    "com.sisa.app.live.ACTION_RUN_BENCHMARK" -> {
+                    "com.example.gemma_live.live.ACTION_RUN_BENCHMARK" -> {
                         android.util.Log.i("LiveMode", "Received ACTION_RUN_BENCHMARK")
                         runLlmBenchmark()
                     }
-                    "com.sisa.app.live.ACTION_SPEAK" -> {
+                    "com.example.gemma_live.live.ACTION_SPEAK" -> {
                         val text = intent.getStringExtra("text") ?: return
                         android.util.Log.i("LiveMode", "Received ACTION_SPEAK: $text")
                         lastAiResponse.value = text
@@ -689,31 +689,31 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                    "com.sisa.app.live.ACTION_USER_INPUT" -> {
+                    "com.example.gemma_live.live.ACTION_USER_INPUT" -> {
                         val text = intent.getStringExtra("text") ?: return
                         android.util.Log.i("LiveMode", "Received ACTION_USER_INPUT: $text")
                         lastBroadcastInputNs = android.os.SystemClock.elapsedRealtimeNanos()
                         currentTranscript.value = text
                         handleUserSpeechFinished(text)
                     }
-                    "com.sisa.app.live.ACTION_INTERRUPT" -> {
+                    "com.example.gemma_live.live.ACTION_INTERRUPT" -> {
                         android.util.Log.i("LiveMode", "Received ACTION_INTERRUPT")
                         interruptAiSpeech()
                     }
-                    "com.sisa.app.live.ACTION_TOGGLE_HANDSFREE" -> {
+                    "com.example.gemma_live.live.ACTION_TOGGLE_HANDSFREE" -> {
                         android.util.Log.i("LiveMode", "Received ACTION_TOGGLE_HANDSFREE")
                         toggleHandsFree()
                     }
-                    "com.sisa.app.live.ACTION_SET_EXTERNAL_MIC" -> {
+                    "com.example.gemma_live.live.ACTION_SET_EXTERNAL_MIC" -> {
                         externalMicMode = intent.getBooleanExtra("enabled", false)
                         android.util.Log.i("LiveMode", "ExternalMicMode=$externalMicMode")
                     }
-                    "com.sisa.app.live.ACTION_SET_AUDIO_SOURCE" -> {
+                    "com.example.gemma_live.live.ACTION_SET_AUDIO_SOURCE" -> {
                         val mode = intent.getStringExtra("mode") ?: "auto"
                         saveAudioSourceMode(mode)
                         android.util.Log.i("LiveMode", "AudioSourceMode=$mode (wirksam ab Loop-Neustart)")
                     }
-                    "com.sisa.app.live.ACTION_REQUEST_CAPTURE" -> {
+                    "com.example.gemma_live.live.ACTION_REQUEST_CAPTURE" -> {
                         android.util.Log.i("LiveMode", "ACTION_REQUEST_CAPTURE empfangen")
                         ensureCaptureHolder()
                         requestCapturePermission()
@@ -770,7 +770,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         android.util.Log.w("LiveMode", "LocalGemma returned empty response, checking fallback")
                     }
-                } else if (com.sisa.app.BuildConfig.BENCHMARK_MODE) {
+                } else if (com.example.gemma_live.BuildConfig.BENCHMARK_MODE) {
                     android.util.Log.w(
                         "LiveMode",
                         "BENCH LocalGemma not available, FALLBACK to E2BAIService (llama-server/10.0.2.2)"
@@ -947,7 +947,7 @@ class MainActivity : ComponentActivity() {
                 val detector = TurnDetector(this@MainActivity).also { turnDetector = it }
                 detector.prepare()
                 val loop = AudioLoop(this@MainActivity).also { audioLoop = it }
-                val sourceOverride: com.sisa.app.ai.AudioFrameSource? = when (audioSourceMode) {
+                val sourceOverride: com.example.gemma_live.ai.AudioFrameSource? = when (audioSourceMode) {
                     "capture" -> {
                         val proj = mediaProjection
                         if (proj == null) {
@@ -955,7 +955,7 @@ class MainActivity : ComponentActivity() {
                             null
                         } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                             try {
-                                com.sisa.app.ai.PlaybackCaptureSource(this@MainActivity, proj)
+                                com.example.gemma_live.ai.PlaybackCaptureSource(this@MainActivity, proj)
                             } catch (t: Throwable) {
                                 android.util.Log.e("LiveMode", "Capture-Source fehlgeschlagen, fallback auto", t)
                                 null
@@ -1189,7 +1189,7 @@ class MainActivity : ComponentActivity() {
     /** Startet den Dummy-FGS (Typ mediaProjection) für getMediaProjection(). */
     private fun ensureCaptureHolder() {
         try {
-            val svc = android.content.Intent(this, com.sisa.app.ai.CaptureHolderService::class.java)
+            val svc = android.content.Intent(this, com.example.gemma_live.ai.CaptureHolderService::class.java)
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 startForegroundService(svc)
             } else {
