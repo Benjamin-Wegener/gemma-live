@@ -494,7 +494,6 @@ class MainActivity : ComponentActivity() {
                 aiResponse = lastAiResponse.value,
                 chatMessages = chatMessages,
                 volumeLevel = volumeLevel.floatValue,
-                engineReady = isEngineReady.value,
                 engineStatus = engineStatus.value,
                 downloadProgress = modelDownloadProgress.floatValue,
                 showVoiceSelector = voiceSelectorState.value,
@@ -1268,7 +1267,6 @@ fun LiveModeScreen(
     aiResponse: String,
     chatMessages: List<ChatBubbleMessage> = emptyList(),
     volumeLevel: Float,
-    engineReady: Boolean = true,
     engineStatus: String = "",
     downloadProgress: Float = 0f,
     showVoiceSelector: Boolean = false,
@@ -1298,13 +1296,7 @@ fun LiveModeScreen(
         LiveState.SPEAKING -> Color(0xFF10B981)    // Smaragdgrün / Sprechen
     }
 
-    val stateTitle = when (liveState) {
-        LiveState.LOADING -> "Gemma loading …"
-        LiveState.IDLE -> "Ready to listen"
-        LiveState.LISTENING -> "Listening to you..."
-        LiveState.THINKING -> "Gemma is thinking..."
-        LiveState.SPEAKING -> "Gemma is speaking"
-    }
+    // Issue #9/#10: stateTitle-Anker entfernt — kein Status-Text mehr in der Live-Ansicht.
 
     var showLicensesDialog by remember { mutableStateOf(false) }
     val chatListState = rememberLazyListState()
@@ -1451,20 +1443,20 @@ Full inventory: NOTICE file in the repository.
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Beim Hören und Nachdenken zeigt ausschließlich der Puls den Zustand.
-            // Dadurch bleibt der Chat beim Übergang LISTENING <-> THINKING an derselben Stelle.
-            if (liveState != LiveState.LISTENING && liveState != LiveState.THINKING) Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Issue #9/#10: kein Status-Titel-Anker mehr — Zustand zeigt nur Puls/Farbe + Top-Bar.
+            // Dadurch kein Layout-Shift beim Wechsel LISTENING <-> THINKING <-> SPEAKING <-> IDLE.
+            // Einzig LOADING behält seinen Fortschritt (determinierter Download-/Engine-Balken).
+            if (liveState == LiveState.LOADING) Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = stateTitle,
+                    text = "Gemma loading …",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = stateColor,
                     textAlign = TextAlign.Center
                 )
-                if (liveState == LiveState.LOADING) {
-                    Spacer(Modifier.height(8.dp))
-                    // Determinierter Downloadfortschritt: füllt sich nur von links nach rechts.
-                    Box(
+                Spacer(Modifier.height(8.dp))
+                // Determinierter Downloadfortschritt: füllt sich nur von links nach rechts.
+                Box(
                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
                             .background(stateColor.copy(alpha = 0.2f))
                     ) {
@@ -1482,16 +1474,6 @@ Full inventory: NOTICE file in the repository.
                         color = MaterialTheme.colorScheme.outline,
                         textAlign = TextAlign.Center
                     )
-                } else {
-                    Text(
-                        text = if (engineReady) "Fully automatic live mode active (Turn-Taking & Barge-In)"
-                        else engineStatus.ifBlank { "Engine not ready" },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
             }
 
             // Issue #8: prominenter Voice-Download-Banner über Mikrofon/Chat —
