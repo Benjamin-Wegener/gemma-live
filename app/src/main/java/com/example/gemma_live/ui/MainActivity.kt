@@ -452,6 +452,11 @@ class MainActivity : ComponentActivity() {
                                 localGemma.currentLanguage = lang
                                 voiceService.currentLanguage = lang
                                 androidTts.setLanguage(java.util.Locale.forLanguageTag(lang))
+                                // Reset conversation context & UI when changing language
+                                localGemma.resetConversation()
+                                currentTranscript.value = ""
+                                lastAiResponse.value = ""
+                                chatMessages.clear()
                                 // Bereits installiert -> sofort laden & Dialog schließen
                                 if (com.example.gemma_live.download.AppModelManager.isModelInstalled(this@MainActivity, target.modelFile)) {
                                     voiceSelectorState.value = false

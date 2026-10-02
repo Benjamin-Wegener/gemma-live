@@ -230,6 +230,14 @@ class LocalGemmaAssistant(private val context: Context) {
         lastLoadInfo = null
     }
 
+    fun resetConversation() {
+        runCatching { activeConversation?.close() }
+        activeConversation = null
+        runCatching { session?.close() }
+        session = null
+        Log.i(TAG, "Conversation context cleared for new chat")
+    }
+
     private fun createDirectAudioConversation(
         e: Engine,
         compactedContext: String = ""
